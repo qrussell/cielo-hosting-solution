@@ -1,0 +1,304 @@
+/**
+ * SkyHS Product Manager styles.
+ */
+
+.skyhshoso-pm-wrap {
+    max-width: 960px;
+    margin: 20px 0;
+}
+
+/* ---- Form sections ---- */
+
+.skyhshoso-pm-form-wrap {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 6px;
+    padding: 24px 28px;
+    margin: 20px 0;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+}
+
+.skyhshoso-pm-form-wrap h2 {
+    margin-top: 0;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #f0f0f1;
+    font-size: 18px;
+}
+
+.skyhshoso-pm-section {
+    margin-bottom: 28px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #f0f0f1;
+}
+
+.skyhshoso-pm-section:last-of-type {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.skyhshoso-pm-section h3 {
+    margin: 0 0 14px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #1d2327;
+}
+
+.skyhshoso-pm-desc {
+    margin: 0 0 16px 0;
+    font-size: 13px;
+    color: #50575e;
+}
+
+.skyhshoso-pm-field-desc {
+    margin: 4px 0 0 0;
+    font-size: 12px;
+    color: #646970;
+    font-style: italic;
+}
+
+/* ---- Layout rows ---- */
+
+.skyhshoso-pm-row {
+    margin-bottom: 16px;
+}
+
+.skyhshoso-pm-row:last-child {
+    margin-bottom: 0;
+}
+
+.skyhshoso-pm-row-cols-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.skyhshoso-pm-row-cols-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+}
+
+.skyhshoso-pm-field label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: #3c434a;
+}
+
+.skyhshoso-pm-field label .req {
+    color: #d63638;
+}
+
+.pm-input {
+    width: 100%;
+    max-width: 100%;
+    border: 1px solid #8c8f94;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 14px;
+    line-height: 1.4;
+    box-sizing: border-box;
+}
+
+.pm-input:focus {
+    border-color: #2271b1;
+    box-shadow: 0 0 0 1px #2271b1;
+    outline: none;
+}
+
+.pm-textarea {
+    min-height: 100px;
+    font-family: monospace;
+    resize: vertical;
+}
+
+select.pm-input {
+    padding: 5px 8px;
+}
+
+/* ---- Variations table ---- */
+
+.skyhshoso-pm-variations-table-wrap {
+    overflow-x: auto;
+    max-width: 100%;
+    margin-top: 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #ffffff;
+}
+
+.skyhshoso-pm-variations-table {
+    width: 100%;
+    min-width: 950px; /* Enforces horizontal scrolling on smaller viewports instead of page stretching */
+    border-collapse: collapse;
+    font-size: 13px;
+    border: none;
+}
+
+.skyhshoso-pm-variations-table thead th {
+    background: #f9fafb;
+    padding: 10px 12px;
+    text-align: left;
+    font-weight: 700;
+    font-size: 11px;
+    color: #4b5563;
+    border-bottom: 2px solid #e5e7eb;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.skyhshoso-pm-variations-table tbody td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #f3f4f6;
+    vertical-align: middle;
+}
+
+.skyhshoso-pm-variations-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.skyhshoso-pm-variations-table tfoot td {
+    padding: 12px;
+    background: #f9fafb;
+    border-top: 1px solid #e5e7eb;
+}
+
+/* Compact layout for variation table inputs */
+.skyhshoso-pm-variations-table .pm-input {
+    font-size: 12px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    height: 32px;
+    line-height: 1.2;
+    box-shadow: none;
+}
+
+/* Specific styling for select and textarea inputs in variations table */
+.skyhshoso-pm-variations-table select.pm-input {
+    height: 32px;
+    padding: 5px 8px;
+}
+
+.skyhshoso-pm-variations-table textarea.pm-input {
+    height: auto;
+    line-height: 1.4;
+}
+
+.col-term { min-width: 130px; }
+.col-discount { min-width: 90px; width: 90px; }
+.col-price { min-width: 100px; width: 100px; }
+.col-period { min-width: 110px; width: 110px; }
+.col-interval { min-width: 80px; width: 80px; }
+.col-actions { width: 44px; }
+
+/* Variable plan table columns and constraints */
+.vp-name { min-width: 120px; width: 14%; }
+.vp-price { min-width: 80px; width: 8%; }
+.vp-period { min-width: 100px; width: 10%; }
+.vp-interval { min-width: 70px; width: 7%; }
+.vp-plan { min-width: 140px; width: 15%; }
+.vp-wp-host { min-width: 180px; width: 18%; }
+.vp-storage { min-width: 90px; width: 9%; }
+.vp-memory { min-width: 100px; width: 10%; }
+.vp-features { min-width: 150px; width: 20%; }
+.vp-actions { width: 44px; }
+
+.skyhshoso-pm-variations-table .vp-features textarea {
+    min-height: 48px;
+    font-size: 12px;
+    resize: vertical;
+}
+
+.pm-remove-variation,
+.wps-remove-variation {
+    color: #ef4444 !important;
+    font-size: 18px !important;
+    line-height: 1 !important;
+    padding: 0 8px !important;
+    height: 32px !important;
+    width: 32px !important;
+    min-height: 32px !important;
+    border: 1px solid transparent !important;
+    background: none !important;
+    border-radius: 6px !important;
+    cursor: pointer !important;
+    transition: all 0.15s ease-in-out !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+}
+
+.pm-remove-variation:hover,
+.wps-remove-variation:hover {
+    color: #dc2626 !important;
+    background: #fef2f2 !important;
+    border-color: #fecaca !important;
+}
+
+/* ---- Actions bar ---- */
+
+.skyhshoso-pm-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid #f0f0f1;
+}
+
+.skyhshoso-pm-actions-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.skyhshoso-pm-actions-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ---- Product list ---- */
+
+#skyhshoso-pm-list {
+    margin-top: 30px;
+}
+
+#skyhshoso-pm-list h2 {
+    font-size: 18px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #f0f0f1;
+}
+
+#skyhshoso-pm-list .wp-list-table th {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* ---- Notice ---- */
+
+#skyhshoso-pm-notice {
+    margin: 0 0 16px 0;
+}
+
+/* ---- Responsive ---- */
+
+@media screen and (max-width: 782px) {
+    .skyhshoso-pm-row-cols-2,
+    .skyhshoso-pm-row-cols-3 {
+        grid-template-columns: 1fr;
+    }
+
+    .skyhshoso-pm-form-wrap {
+        padding: 16px;
+    }
+
+    .skyhshoso-pm-variations-table {
+        font-size: 12px;
+    }
+}

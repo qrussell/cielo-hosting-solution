@@ -1,0 +1,566 @@
+/* Custom CSS for domain-checker */
+:root {
+  --skyhs-primary: #2563eb;
+  --skyhs-primary-hover: #1d4ed8;
+  --skyhs-border-color: #cbd5e1;
+}
+
+.skyhshoso-domain-checker-container {
+  font-family: Inter,"Noto Sans",sans-serif !important;
+  max-width: 1140px;
+  margin: 0 auto;
+  padding: 30px;
+}
+
+.skyhshoso-domain-checker-card {
+  border: 1px solid #dbe1e6 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.1) !important;
+  background-color: #fff !important;
+  padding: 32px !important;
+  margin-bottom: 20px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.skyhshoso-domain-checker-title {
+  text-align: left !important;
+  margin-bottom: 1.5rem !important;
+  font-size: 20px !important;
+  font-weight: 700 !important;
+  color: #111518 !important;
+}
+
+.skyhshoso-domain-checker-form {
+  display: flex !important;
+  margin-bottom: 1.5rem !important;
+  width: 100% !important;
+}
+
+.skyhshoso-domain-checker-input {
+  flex: 1 !important;
+  padding: 12px 16px !important;
+  border: 1px solid #dbe1e6 !important;
+  border-radius: 8px !important;
+  font-size: 1rem !important;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.05) !important;
+}
+
+.skyhshoso-domain-checker-button {
+  background-color: var(--skyhs-primary) !important;
+  color: white !important;
+  border: 1px solid var(--skyhs-primary) !important;
+  padding: 12px 20px !important;
+  cursor: pointer !important;
+  font-size: 1rem !important;
+  border-radius: 8px !important;
+  transition: all 0.2s ease !important;
+  font-weight: 500 !important;
+}
+
+.skyhshoso-domain-checker-button:hover {
+  background-color: var(--skyhs-primary-hover) !important;
+}
+
+.skyhshoso-domain-checker-button.secondary {
+  background-color: #f0f2f5 !important;
+  border-color: #f0f2f5 !important;
+  border-radius: 8px !important;
+  padding: 10px 16px !important;
+  color: #111518 !important;
+}
+
+.skyhshoso-domain-checker-button.secondary:hover {
+  background-color: #e5e8ec !important;
+}
+
+.skyhshoso-domain-checker-button.success {
+  background-color: var(--skyhs-primary) !important;
+  border-color: var(--skyhs-primary) !important;
+  padding: 10px 16px !important;
+  border-radius: 8px !important;
+  transition: all 0.2s ease !important;
+  width: 100% !important;
+  height: 44px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-weight: 500 !important;
+}
+
+.skyhshoso-domain-checker-button.success:hover {
+  background-color: var(--skyhs-primary-hover) !important;
+  transform: translateY(-1px) !important;
+}
+
+.skyhshoso-domain-checker-button:disabled,
+.skyhshoso-domain-checker-button.disabled {
+  opacity: 0.65 !important;
+  cursor: not-allowed !important;
+}
+
+/* Flex layout for domain results */
+.skyhshoso-domain-results {
+  margin-bottom: 30px !important;
+}
+
+.skyhshoso-domain-result-header {
+  display: flex !important;
+  background-color: #f8f9fa !important;
+  border: 1px solid #dbe1e6 !important;
+  border-top-left-radius: 8px !important;
+  border-top-right-radius: 8px !important;
+  font-weight: 600 !important;
+  color: #111518 !important;
+}
+
+.skyhshoso-domain-result-item {
+  display: flex !important;
+  border: 1px solid #dbe1e6 !important;
+  border-top: none !important;
+  transition: background-color 0.2s ease !important;
+  margin-bottom: 8px !important;
+}
+
+.skyhshoso-domain-result-item:last-child {
+  border-bottom-left-radius: 8px !important;
+  border-bottom-right-radius: 8px !important;
+}
+
+.skyhshoso-domain-result-item:hover {
+  background-color: #f8f9fa !important;
+}
+
+.skyhshoso-domain-result-col {
+  padding: 16px !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+.skyhshoso-domain-result-col-domain {
+  flex: 3.5 !important;
+}
+
+.skyhshoso-domain-result-col-price {
+  flex: 4 !important;
+}
+
+.skyhshoso-domain-result-col-action {
+  flex: 2.5 !important;
+  justify-content: center !important;
+}
+
+.skyhshoso-domain-result-domain-container {
+  display: flex !important;
+  align-items: center !important;
+  width: 100% !important;
+}
+
+.skyhshoso-domain-result-domain-name {
+  font-weight: 600 !important;
+  font-size: 1.1rem !important;
+  color: #333 !important;
+  margin-right: 10px !important;
+}
+
+.skyhshoso-domain-result-price-container {
+  line-height: 1.6 !important;
+}
+
+.skyhshoso-domain-result-price-container div {
+  margin-bottom: 4px !important;
+}
+
+#suggestions {
+  margin-top: 20px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+}
+
+#suggestions .skyhshoso-domain-result-item {
+  margin-bottom: 0 !important;
+  border: 1px solid #dbe1e6 !important;
+  border-radius: 8px !important;
+}
+
+.skyhshoso-domain-checker-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 4px 8px !important;
+  font-size: 75% !important;
+  font-weight: 700 !important;
+  line-height: 1 !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+  vertical-align: baseline !important;
+  border-radius: 4px !important;
+}
+
+.skyhshoso-domain-checker-badge-success {
+  color: #fff !important;
+  background-color: #28a745 !important;
+}
+
+.skyhshoso-domain-checker-badge-danger {
+  color: #fff !important;
+  background-color: #dc3545 !important;
+}
+
+.skyhshoso-domain-checker-hidden {
+  display: none !important;
+}
+
+.skyhshoso-domain-checker-text-center {
+  text-align: center !important;
+}
+
+.skyhshoso-domain-checker-mt-4 {
+  margin-top: 1.5rem !important;
+}
+
+.skyhshoso-domain-checker-mb-3 {
+  margin-bottom: 1rem !important;
+}
+
+.skyhshoso-domain-checker-mb-4 {
+  margin-bottom: 1.5rem !important;
+}
+
+.skyhshoso-domain-checker-text-danger {
+  color: #dc3545 !important;
+}
+
+/* Spinner */
+.skyhshoso-domain-checker-spinner {
+  display: inline-block !important;
+  width: 2rem !important;
+  height: 2rem !important;
+  border: 0.25em solid rgba(0, 0, 0, 0.1) !important;
+  border-right-color: var(--skyhs-primary) !important;
+  border-radius: 50% !important;
+  animation: spinner-border 0.75s linear infinite !important;
+}
+
+.skyhshoso-domain-checker-spinner-sm {
+  width: 1rem !important;
+  height: 1rem !important;
+  border-width: 0.2em !important;
+  margin-right: 5px !important;
+  vertical-align: middle !important;
+}
+
+@keyframes spinner-border {
+  to { transform: rotate(360deg); }
+}
+
+.skyhshoso-domain-checker-sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+#load-more-container {
+  margin-top: 20px !important;
+  text-align: center !important;
+}
+
+.skyhshoso-hosting-header-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.skyhshoso-domain-checker-description {
+    text-align: center;
+    color: #6b7280;
+    margin-bottom: 1.5rem;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+#domain-transfer-form {
+    flex-direction: column;
+}
+
+#domain-transfer-form .skyhshoso-domain-checker-input:first-of-type {
+    margin-bottom: 10px;
+}
+
+#domain-search-form #load-more,
+.skyhshoso-domain-checker-container #load-more,
+#suggestions ~ #load-more-container #load-more {
+  min-width: 180px !important;
+  height: auto !important;
+  background-color: #f0f2f5 !important;
+  color: #111518 !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 10px 16px !important;
+  font-family: Inter, "Noto Sans", sans-serif !important;
+  font-size: 16px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition: background-color 0.2s !important;
+  box-shadow: none !important;
+  text-transform: none !important;
+  line-height: 1.5 !important;
+  display: inline-block !important;
+  text-align: center !important;
+}
+
+#domain-search-form #load-more:hover,
+.skyhshoso-domain-checker-container #load-more:hover,
+#suggestions ~ #load-more-container #load-more:hover {
+  background-color: #e5e8ec !important;
+}
+
+#domain-search-form #load-more:focus,
+.skyhshoso-domain-checker-container #load-more:focus,
+#suggestions ~ #load-more-container #load-more:focus {
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(17, 21, 24, 0.2) !important;
+}
+
+/* Specific styles for when domain checker is inside skyhs dashboard */
+.skyhshoso-domain-checker-wrapper {
+  max-width: 100% !important;
+  width: 100% !important;
+  display: block !important;
+  margin: 0 auto !important;
+}
+
+.skyhshoso-domain-checker-wrapper .skyhshoso-domain-checker-container {
+  max-width: 100% !important;
+  width: 100% !important;
+  display: block !important;
+  padding: 0 !important;
+}
+
+.skyhshoso-domain-checker-wrapper .skyhshoso-domain-checker-card {
+  padding: var(--skyhs-card-padding, 32px) !important;
+  margin-bottom: 0 !important;
+  width: 100% !important;
+  display: block !important;
+  box-sizing: border-box !important;
+}
+
+.skyhshoso-domain-checker-wrapper .skyhshoso-domain-checker-button {
+  background-color: var(--skyhs-primary) !important;
+  color: #fff !important;
+  border-radius: 8px !important;
+  font-weight: 500 !important;
+  transition: background-color .2s !important;
+}
+
+.skyhshoso-domain-checker-wrapper .skyhshoso-domain-checker-button:hover {
+  background-color: var(--skyhs-primary-hover) !important;
+}
+
+.skyhshoso-domain-checker-wrapper .skyhshoso-domain-checker-button.secondary {
+  background-color: #f0f2f5 !important;
+  color: #111518 !important;
+  border-radius: 8px !important;
+  padding: 10px 16px !important;
+  transition: background-color .2s !important;
+}
+
+.skyhshoso-domain-checker-wrapper .skyhshoso-domain-checker-button.secondary:hover {
+  background-color: #e5e8ec !important;
+}
+
+.skyhshoso-domain-checker-wrapper .skyhshoso-domain-checker-input {
+  border: 1px solid #dbe1e6 !important;
+  border-radius: 8px !important;
+  padding: 12px 16px !important;
+  margin-right: 8px !important;
+}
+
+.skyhshoso-domain-checker-wrapper .skyhshoso-domain-checker-input:focus {
+  outline: none !important;
+  border-color: var(--skyhs-primary) !important;
+}
+
+/* Media queries */
+@media (max-width: 767px) {
+  .skyhshoso-domain-checker-form {
+    flex-direction: column !important;
+  }
+  
+  .skyhshoso-domain-checker-input {
+    border-radius: 8px !important;
+    margin-bottom: 10px !important;
+    margin-right: 0 !important;
+  }
+  
+  .skyhshoso-domain-checker-button {
+    border-radius: 8px !important;
+    width: 100% !important;
+  }
+  
+  .skyhshoso-domain-result-header {
+    display: none !important;
+  }
+  
+  .skyhshoso-domain-result-item {
+    flex-direction: column !important;
+    margin-bottom: 16px !important;
+    border: 1px solid #dbe1e6 !important;
+    border-radius: 8px !important;
+  }
+  
+  .skyhshoso-domain-result-col {
+    padding: 12px 16px !important;
+  }
+  
+  .skyhshoso-domain-result-col-domain {
+    background-color: #f8f9fa !important;
+    border-top-left-radius: 8px !important;
+    border-top-right-radius: 8px !important;
+    border-bottom: 1px solid #dbe1e6 !important;
+  }
+  
+  .skyhshoso-domain-result-domain-container {
+    justify-content: space-between !important;
+  }
+  
+  /* Hide the pseudo-elements */
+  .skyhshoso-domain-result-col-price:before,
+  .skyhshoso-domain-result-col-action:before {
+    display: none !important;
+  }
+  
+  .skyhshoso-domain-result-col-action {
+    justify-content: center !important;
+  }
+  
+  .skyhshoso-domain-result-skeleton-domain,
+  .skyhshoso-domain-result-skeleton-price,
+  .skyhshoso-domain-result-skeleton-action {
+    padding: 8px 0 !important;
+  }
+  
+  .skyhshoso-domain-result-skeleton-domain {
+    margin-bottom: 8px !important;
+    padding-bottom: 16px !important;
+    border-bottom: 1px solid #f0f2f5 !important;
+  }
+  
+  .skyhshoso-domain-result-skeleton-price {
+    margin-bottom: 16px !important;
+  }
+}
+
+/* Ensure these styles are applied in the skyhs dashboard as well */
+.skyhshoso-domain-checker-wrapper #load-more-container {
+  margin-top: 24px !important;
+}
+
+.skyhshoso-domain-checker-wrapper #load-more {
+  background-color: #f0f2f5 !important;
+  color: #111518 !important;
+  border-radius: 8px !important;
+  padding: 10px 16px !important;
+  font-size: 16px !important;
+  font-weight: 500 !important;
+}
+
+/* Skeleton loading animation */
+.skyhshoso-domain-result-loading {
+  padding: 16px !important;
+  background-color: #fff !important;
+  border-radius: 8px !important;
+  border: 1px solid #dbe1e6 !important;
+}
+
+.skyhshoso-domain-result-placeholder {
+  height: 20px !important;
+  background-color: #f0f2f5 !important;
+  border-radius: 4px !important;
+  margin-bottom: 8px !important;
+  animation: skeleton-pulse 1.5s ease-in-out infinite !important;
+  width: 100% !important;
+}
+
+.skyhshoso-domain-result-placeholder.sm {
+  width: 60% !important;
+}
+
+.skyhshoso-domain-result-placeholder.md {
+  width: 80% !important;
+}
+
+.skyhshoso-domain-result-placeholder.lg {
+  width: 100% !important;
+}
+
+.skyhshoso-domain-result-placeholder.button {
+  height: 36px !important;
+  width: 100% !important;
+}
+
+@keyframes skeleton-pulse {
+  0% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 0.3;
+  }
+  100% {
+    opacity: 0.6;
+  }
+}
+
+/* Skeleton loading for domain results */
+.skyhshoso-domain-result-skeleton {
+  display: flex !important;
+  flex-direction: row !important;
+  border: 1px solid #dbe1e6 !important;
+  border-radius: 8px !important;
+  padding: 16px !important;
+  margin-bottom: 12px !important;
+}
+
+.skyhshoso-domain-result-skeleton-domain {
+  flex: 3.5 !important;
+  padding-right: 16px !important;
+}
+
+.skyhshoso-domain-result-skeleton-price {
+  flex: 4 !important;
+  padding: 0 16px !important;
+}
+
+.skyhshoso-domain-result-skeleton-action {
+  flex: 2.5 !important;
+  padding-left: 16px !important;
+}
+
+@media (max-width: 767px) {
+  .skyhshoso-domain-result-skeleton {
+    flex-direction: column !important;
+  }
+  
+  .skyhshoso-domain-result-skeleton-domain,
+  .skyhshoso-domain-result-skeleton-price,
+  .skyhshoso-domain-result-skeleton-action {
+    padding: 8px 0 !important;
+  }
+  
+  .skyhshoso-domain-result-skeleton-domain {
+    margin-bottom: 8px !important;
+    padding-bottom: 16px !important;
+    border-bottom: 1px solid #f0f2f5 !important;
+  }
+  
+  .skyhshoso-domain-result-skeleton-price {
+    margin-bottom: 16px !important;
+  }
+} 

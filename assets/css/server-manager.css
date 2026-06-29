@@ -1,0 +1,341 @@
+/**
+ * SkyHS Server Manager styles.
+ */
+
+.skyhshoso-sm-wrap {
+    max-width: 1100px;
+    margin: 20px 0;
+}
+
+#skyhshoso-sm-app {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    align-items: start;
+    margin-top: 20px;
+}
+
+@media screen and (max-width: 960px) {
+    #skyhshoso-sm-app {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ---- Form panel ---- */
+
+.skyhshoso-sm-form-panel {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    overflow: hidden;
+}
+
+.skyhshoso-sm-form-header {
+    padding: 18px 24px;
+    background: #f6f7f7;
+    border-bottom: 1px solid #dcdcde;
+}
+
+.skyhshoso-sm-form-header h2 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.skyhshoso-sm-form {
+    padding: 20px 24px 24px;
+}
+
+.skyhshoso-sm-section {
+    margin-bottom: 24px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #f0f0f1;
+}
+
+.skyhshoso-sm-section:last-of-type {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.skyhshoso-sm-section h3 {
+    margin: 0 0 4px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #1d2327;
+}
+
+.skyhshoso-sm-desc {
+    margin: 0 0 16px 0;
+    font-size: 13px;
+    color: #50575e;
+}
+
+.skyhshoso-sm-row {
+    margin-bottom: 14px;
+}
+
+.skyhshoso-sm-row:last-child {
+    margin-bottom: 0;
+}
+
+.skyhshoso-sm-row-cols-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+}
+
+@media screen and (max-width: 782px) {
+    .skyhshoso-sm-row-cols-2 {
+        grid-template-columns: 1fr;
+    }
+}
+
+.skyhshoso-sm-field label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: #3c434a;
+}
+
+.skyhshoso-sm-field label .req {
+    color: #d63638;
+}
+
+.sm-input {
+    width: 100%;
+    border: 1px solid #8c8f94;
+    border-radius: 4px;
+    padding: 7px 10px;
+    font-size: 14px;
+    line-height: 1.4;
+    box-sizing: border-box;
+}
+
+.sm-input:focus {
+    border-color: #2271b1;
+    box-shadow: 0 0 0 1px #2271b1;
+    outline: none;
+}
+
+.sm-field-desc {
+    margin: 4px 0 0 0;
+    font-size: 12px;
+    color: #646970;
+    font-style: italic;
+}
+
+/* ---- Actions bar ---- */
+
+.skyhshoso-sm-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid #f0f0f1;
+}
+
+.skyhshoso-sm-actions-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.skyhshoso-sm-actions-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sm-test-result {
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.sm-test-result.success {
+    color: #007017;
+}
+
+.sm-test-result.error {
+    color: #d63638;
+}
+
+/* ---- Test results panel ---- */
+
+.skyhshoso-sm-test-results {
+    margin-top: 16px;
+    padding: 16px;
+    background: #f6f7f7;
+    border-radius: 6px;
+    border: 1px solid #dcdcde;
+}
+
+.skyhshoso-sm-test-results h4 {
+    margin: 0 0 12px 0;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+#sm-test-status .notice {
+    margin: 0 0 12px 0;
+}
+
+.sm-plan-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+/* ---- Server cards ---- */
+
+.skyhshoso-sm-list-panel {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    overflow: hidden;
+}
+
+.skyhshoso-sm-list-header {
+    padding: 18px 24px;
+    background: #f6f7f7;
+    border-bottom: 1px solid #dcdcde;
+}
+
+.skyhshoso-sm-list-header h2 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.skyhshoso-sm-empty {
+    padding: 40px 24px;
+    text-align: center;
+    color: #646970;
+}
+
+/* Server cards list */
+.skyhshoso-sm-server-list {
+    padding: 16px;
+}
+
+.skyhshoso-sm-server-card {
+    border: 1px solid #e5e5e5;
+    border-radius: 6px;
+    padding: 16px;
+    margin-bottom: 12px;
+    background: #fafafa;
+    transition: border-color 0.15s;
+}
+
+.skyhshoso-sm-server-card:last-child {
+    margin-bottom: 0;
+}
+
+.skyhshoso-sm-server-card:hover {
+    border-color: #c3c4c7;
+    background: #fff;
+}
+
+.sm-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.sm-card-top h3 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.sm-card-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+}
+
+.sm-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.sm-status-dot.sm-status-ok {
+    background: #00a32a;
+}
+
+.sm-status-dot.sm-status-error {
+    background: #d63638;
+}
+
+.sm-status-text.ok {
+    color: #007017;
+}
+
+.sm-status-text.error {
+    color: #b32d2e;
+}
+
+.sm-card-body {
+    margin-bottom: 12px;
+}
+
+.sm-card-detail {
+    font-size: 13px;
+    margin-bottom: 4px;
+}
+
+.sm-detail-label {
+    font-weight: 600;
+    color: #50575e;
+    margin-right: 4px;
+}
+
+.sm-detail-value {
+    color: #1d2327;
+}
+
+.sm-card-plans {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 8px;
+}
+
+.sm-plan-tag {
+    display: inline-block;
+    background: #e5f5fa;
+    color: #007199;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 10px;
+    line-height: 1.6;
+}
+
+.sm-plan-tag.sm-plan-more {
+    background: #f0f0f1;
+    color: #646970;
+}
+
+.sm-card-actions {
+    display: flex;
+    gap: 6px;
+    border-top: 1px solid #f0f0f1;
+    padding-top: 12px;
+}
+
+/* ---- Utility ---- */
+
+#skyhshoso-sm-notice {
+    margin: 16px 0;
+}

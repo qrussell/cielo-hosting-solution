@@ -1,0 +1,210 @@
+/* Admin Wizard Styles for SkyHS Hosting Solution */
+.skyhshoso-wizard-wrap {
+    max-width: 1100px;
+    margin: 40px auto;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+
+.skyhshoso-wizard-header {
+    background: #2271b1;
+    color: #fff;
+    padding: 30px;
+    text-align: center;
+}
+
+.skyhshoso-wizard-header h1 {
+    color: #fff;
+    margin: 0 0 10px;
+    font-size: 24px;
+}
+
+.skyhshoso-wizard-header p {
+    margin: 0;
+    font-size: 15px;
+    opacity: 0.9;
+}
+
+.skyhshoso-wizard-nav {
+    display: flex;
+    background: #f0f0f1;
+    border-bottom: 1px solid #dcdcde;
+}
+
+.skyhshoso-wizard-step-link {
+    flex: 1;
+    text-align: center;
+    padding: 15px;
+    color: #646970;
+    font-weight: 600;
+    cursor: default; /* Disable clicking on steps directly for now */
+    border-bottom: 3px solid transparent;
+}
+
+.skyhshoso-wizard-step-link.active {
+    color: #2271b1;
+    border-bottom-color: #2271b1;
+    background: #fff;
+}
+
+.skyhshoso-wizard-step-link.completed {
+    color: #135e96;
+}
+
+.skyhshoso-wizard-content {
+    padding: 40px;
+}
+
+.skyhshoso-wizard-step {
+    display: none;
+}
+
+.skyhshoso-wizard-step.active {
+    display: block;
+    animation: fadeIn 0.4s ease-in-out;
+}
+
+.skyhshoso-wizard-step h2 {
+    margin-top: 0;
+    font-size: 20px;
+    color: #1d2327;
+}
+
+.skyhshoso-wizard-form-group {
+    margin-bottom: 20px;
+}
+
+.skyhshoso-wizard-form-group label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #1d2327;
+}
+
+.skyhshoso-wizard-form-group input[type="text"],
+.skyhshoso-wizard-form-group input[type="password"],
+.skyhshoso-wizard-form-group select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #8c8f94;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.skyhshoso-wizard-form-group input:focus,
+.skyhshoso-wizard-form-group select:focus {
+    border-color: #2271b1;
+    box-shadow: 0 0 0 1px #2271b1;
+    outline: none;
+}
+
+.skyhshoso-wizard-actions {
+    margin-top: 30px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 20px;
+    border-top: 1px solid #dcdcde;
+}
+
+.skyhshoso-wizard-btn {
+    display: inline-block;
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1px solid transparent;
+}
+
+.skyhshoso-wizard-btn-primary {
+    background: #2271b1;
+    color: #fff;
+    border-color: #2271b1;
+}
+
+.skyhshoso-wizard-btn-primary:hover {
+    background: #135e96;
+    border-color: #135e96;
+    color: #fff;
+}
+
+.skyhshoso-wizard-btn-secondary {
+    background: #f6f7f7;
+    color: #2271b1;
+    border-color: #2271b1;
+}
+
+.skyhshoso-wizard-btn-secondary:hover {
+    background: #f0f0f1;
+    color: #135e96;
+}
+
+.skyhshoso-wizard-notice {
+    padding: 15px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+    display: none;
+}
+
+.skyhshoso-wizard-notice.error {
+    background: #fcf0f1;
+    color: #d63638;
+    border-left: 4px solid #d63638;
+    display: block;
+}
+
+.skyhshoso-wizard-notice.success {
+    background: #f0f6fc;
+    color: #007017;
+    border-left: 4px solid #007017;
+    display: block;
+}
+
+/* Loader */
+.skyhshoso-loader {
+    display: none;
+    margin-left: 10px;
+    border: 3px solid #f3f3f3;
+    border-radius: 50%;
+    border-top: 3px solid #2271b1;
+    width: 20px;
+    height: 20px;
+    animation: spin 1s linear infinite;
+    vertical-align: middle;
+}
+
+.skyhshoso-wizard-packages {
+    margin-top: 20px;
+    background: #f0f6fc;
+    padding: 15px;
+    border-radius: 4px;
+    border: 1px solid #c3d9ed;
+}
+
+.skyhshoso-wizard-packages h4 {
+    margin-top: 0;
+    color: #007017;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Confetti */
+.skyhshoso-wizard-success-icon {
+    font-size: 60px;
+    color: #007017;
+    text-align: center;
+    margin-bottom: 20px;
+}
