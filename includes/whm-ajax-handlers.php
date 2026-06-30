@@ -8,6 +8,10 @@ add_action('wp_ajax_skyhshoso_generate_cpanel_login_url', 'skyhshoso_generate_cp
 add_action('wp_ajax_skyhshoso_get_cpanel_stats', 'skyhshoso_get_cpanel_stats');
 add_action('wp_ajax_skyhshoso_refresh_cpanel_stats', 'skyhshoso_refresh_cpanel_stats');
 add_action('wp_ajax_skyhshoso_get_cpanel_section_url', 'skyhshoso_get_cpanel_section_url');
+add_action('wp_ajax_skyhshoso_toggle_ssh', 'skyhshoso_toggle_ssh');
+add_action('wp_ajax_skyhshoso_reset_password', 'skyhshoso_reset_password');
+add_action('wp_ajax_skyhshoso_scan_wp_sites', 'skyhshoso_scan_wp_sites');
+add_action('wp_ajax_skyhshoso_assign_custom_domain', 'skyhshoso_assign_custom_domain');
 
 function skyhshoso_generate_cpanel_login_url() {
     // Verify nonce for security
@@ -27,8 +31,6 @@ function skyhshoso_generate_cpanel_login_url() {
         wp_send_json_error( array( 'message' => esc_html__( 'You do not have permission to perform this action.', 'skyhs-hosting-solution' ) ) );
         wp_die();
     }
-
-
 
     $hosting_id = isset($_POST['hosting_id']) ? absint( $_POST['hosting_id'] ) : 0;
     $server_id = get_post_meta($hosting_id, 'skyhshoso_server_id', true);
@@ -95,7 +97,6 @@ function skyhshoso_generate_cpanel_login_url() {
     }
 
     $response_body = wp_remote_retrieve_body( $response );
-
     $data = json_decode($response_body, true);
 
     if (isset($data['data']['url'])) {
@@ -333,4 +334,197 @@ function skyhshoso_get_cpanel_section_url() {
         wp_send_json_error( array( 'message' => 'Failed to generate session.' ) );
     }
     wp_die();
+}
+
+/**
+ * Toggle SSH Access via WHM API
+ */
+function skyhshoso_toggle_ssh() {
+    check_ajax_referer('skyhshoso_dashboard_nonce', 'nonce');
+    
+    $hosting_id = absint($_POST['hosting_id']);
+    $action = sanitize_text_field($_POST['action_state']); // 'enable' or 'disable'
+    
+    // 1. Get Server Details
+    $server_id = get_post_meta($hosting_id, 'skyhshoso_server_id', true);
+    $username  = get_post_meta($hosting_id, 'skyhshoso_hosting_username', true);
+    $whm_api_user = get_post_meta($server_id, '_skyhshoso_whm_user_id', true);
+    $whm_api_token = get_post_meta($server_id, '_skyhshoso_whm_token', true);
+    $whm_api_host  = get_post_meta($server_id, '_skyhshoso_whm_host', true);
+
+    $whm_api = new SkyHSHOSO_WHM_API($whm_api_user, $whm_api_token, $whm_api_host);
+    
+    // WHM API Call to toggle SSH
+    $function = ($action === 'enable') ? 'ssh_enable' : 'ssh_disable';
+    $result = $whm_api->cpanel_uapi_call_v3($username, 'SSH', $function, array());
+
+    if ($result) {
+        wp_send_json_success(['message' => 'SSH access updated.']);
+    } else {
+        wp_send_json_error(['message' => 'Failed to update SSH access.']);
+    }
+}
+
+/**
+ * Reset cPanel Password
+ */
+function skyhshoso_reset_password() {
+    check_ajax_referer('skyhshoso_dashboard_nonce', 'nonce');
+    
+    $hosting_id = absint($_POST['hosting_id']);
+    $new_pass = sanitize_text_field($_POST['new_password']);
+    
+    $server_id = get_post_meta($hosting_id, 'skyhshoso_server_id', true);
+    $username  = get_post_meta($hosting_id, 'skyhshoso_hosting_username', true);
+    $whm_api_user = get_post_meta($server_id, '_skyhshoso_whm_user_id', true);
+    $whm_api_token = get_post_meta($server_id, '_skyhshoso_whm_token', true);
+    $whm_api_host  = get_post_meta($server_id, '_skyhshoso_whm_host', true);
+
+    $whm_api = new SkyHSHOSO_WHM_API($whm_api_user, $whm_api_token, $whm_api_host);
+    
+    // WHM API 'passwd'
+    $result = $whm_api->cpanel_uapi_call_v3($username, 'Passwd', 'set_password', array('password' => $new_pass));
+
+    if ($result) {
+        wp_send_json_success(['message' => 'Password reset successfully.']);
+    } else {
+        wp_send_json_error(['message' => 'Failed to reset password.']);
+    }
+}
+
+/**
+ * Scan account for WP sites
+ */
+function skyhshoso_scan_wp_sites() {
+    check_ajax_referer('skyhshoso_dashboard_nonce', 'nonce');
+    
+    $hosting_id = absint($_POST['hosting_id']);
+    $username  = get_post_meta($hosting_id, 'skyhshoso_hosting_username', true);
+    
+    // Strict validation
+    if (empty($username) || !preg_match('/^[a-z0-9_-]+$/', $username)) {
+        wp_send_json_error(['message' => 'Invalid username']);
+    }
+
+    $base_dir = "/home/" . $username . "/public_html";
+    
+    // Ensure base directory exists before running find
+    if (!is_dir($base_dir)) {
+        wp_send_json_error(['message' => 'Public directory not found']);
+    }
+
+    // Use escapeshellarg for security
+    $cmd = "find " . escapeshellarg($base_dir) . " -name wp-config.php -not -path '*/wp-content/*' 2>&1";
+    $output = shell_exec($cmd);
+    
+    $sites = [];
+    
+    if (!empty($output)) {
+        $lines = explode("\n", trim($output));
+        $domain = get_post_meta($hosting_id, 'skyhshoso_hosting_domain', true);
+        
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if (empty($line)) continue;
+
+            // Get directory containing wp-config.php
+            $dir = dirname($line);
+            
+            // Calculate relative path for URL
+            $relative_path = str_replace($base_dir, '', $dir);
+            $relative_path = ltrim($relative_path, '/');
+            
+            $url = 'https://' . $domain . ($relative_path ? '/' . $relative_path : '');
+            
+            $sites[] = [
+                'path' => $line,
+                'site_url' => $url,
+                'admin_url' => $url . '/wp-admin/'
+            ];
+        }
+    }
+    
+    wp_send_json_success(['sites' => $sites]);
+}
+
+/**
+ * Assign Custom Domain and Search/Replace
+ */
+function skyhshoso_assign_custom_domain() {
+    check_ajax_referer('skyhshoso_dashboard_nonce', 'nonce');
+    
+    $hosting_id = absint($_POST['hosting_id']);
+    $new_domain = sanitize_text_field($_POST['new_domain']);
+    
+    // Security: Verify Ownership
+    $current_user_id = get_current_user_id();
+    $post_author_id = absint(get_post_field('post_author', $hosting_id));
+    if ($current_user_id !== $post_author_id && !current_user_can('administrator')) {
+        wp_send_json_error(['message' => 'Permission denied.']);
+    }
+
+    $server_id = get_post_meta($hosting_id, 'skyhshoso_server_id', true);
+    $username  = get_post_meta($hosting_id, 'skyhshoso_hosting_username', true);
+    $system_domain = get_post_meta($hosting_id, '_skyhshoso_system_domain', true);
+    
+    // Fallback if system domain wasn't recorded
+    if (empty($system_domain)) {
+        $system_domain = get_post_meta($hosting_id, 'skyhshoso_hosting_domain', true);
+    }
+    
+    $whm_api_user = get_post_meta($server_id, '_skyhshoso_whm_user_id', true);
+    $whm_api_token = get_post_meta($server_id, '_skyhshoso_whm_token', true);
+    $whm_api_host  = get_post_meta($server_id, '_skyhshoso_whm_host', true);
+    
+    $whm_api = new SkyHSHOSO_WHM_API($whm_api_user, $whm_api_token, $whm_api_host);
+
+    // --- PHASE 1: SERVER INFRASTRUCTURE ---
+
+    // 1. Add Addon Domain via WHM API (Mapping it to public_html)
+    $addon_args = [
+        'domain' => $new_domain,
+        'dir' => 'public_html',
+        'subdomain' => str_replace('.', '_', $new_domain)
+    ];
+    $whm_api->cpanel_uapi_call_v3($username, 'DomainInfo', 'create_addon_domain', $addon_args);
+    
+    // 2. Trigger AutoSSL for the new domain
+    $whm_api->cpanel_uapi_call_v3($username, 'SSL', 'start_autossl_check', []);
+
+
+    // --- PHASE 2: WORDPRESS MIGRATION ---
+
+    $public_html = "/home/" . $username . "/public_html";
+    
+    // Verify if WordPress actually exists before running WP-CLI
+    if (file_exists($public_html . '/wp-config.php')) {
+        
+        // 3. Maintenance Mode ON
+        shell_exec("wp maintenance-mode activate --path=" . escapeshellarg($public_html) . " 2>&1");
+        
+        // 4. Perform Search & Replace (HTTP and HTTPS)
+        $old_url_https = "https://" . rtrim($system_domain, '/');
+        $new_url_https = "https://" . rtrim($new_domain, '/');
+        $old_url_http = "http://" . rtrim($system_domain, '/');
+        $new_url_http = "http://" . rtrim($new_domain, '/');
+
+        $sr_cmd_https = "wp search-replace " . escapeshellarg($old_url_https) . " " . escapeshellarg($new_url_https) . " --path=" . escapeshellarg($public_html) . " --skip-columns=guid --all-tables 2>&1";
+        $sr_cmd_http = "wp search-replace " . escapeshellarg($old_url_http) . " " . escapeshellarg($new_url_http) . " --path=" . escapeshellarg($public_html) . " --skip-columns=guid --all-tables 2>&1";
+        
+        shell_exec($sr_cmd_https);
+        shell_exec($sr_cmd_http);
+        
+        // 5. Flush Caches
+        shell_exec("wp cache flush --path=" . escapeshellarg($public_html) . " 2>&1");
+        
+        // 6. Maintenance Mode OFF
+        shell_exec("wp maintenance-mode deactivate --path=" . escapeshellarg($public_html) . " 2>&1");
+    }
+
+    // --- PHASE 3: DATABASE UPDATE ---
+
+    // Update the WordPress meta so the dashboard reflects the new domain
+    update_post_meta($hosting_id, 'skyhshoso_hosting_domain', $new_domain);
+    
+    wp_send_json_success(['message' => 'Custom domain assigned and WordPress URLs updated securely.']);
 }

@@ -840,262 +840,167 @@ class SkyHSHOSO_Dashboard_Shortcode {
     }
     
     /**
-     * Render the hosting detail view
-     * 
-     * @param int $hosting_id The hosting ID to display
+     * Render the GoDaddy-Style Hosting Detail Control Panel
+     * * @param int $hosting_id The hosting ID to display
      */
     public static function render_hosting_detail($hosting_id) {
-        // Get the hosting post
         $hosting = get_post($hosting_id);
         
         if (!$hosting || $hosting->post_type !== 'skyhshoso_hosting') {
-            ?>
-            <div class="skyhshoso-hosting-header">
-                <p class="skyhshoso-hosting-title"><?php esc_html_e('Hosting Details', 'skyhs-hosting-solution'); ?></p>
-            </div>
-            <div class="skyhshoso-section-content">
-                <p><?php esc_html_e('Hosting not found.', 'skyhs-hosting-solution'); ?></p>
-                <a href="<?php echo esc_url( add_query_arg( 'tab', 'skyhshoso_hosting', self::get_base_url() ) ); ?>" class="skyhshoso-card-button">
-                    <span><?php esc_html_e('Back to Hosting', 'skyhs-hosting-solution'); ?></span>
-                </a>
-            </div>
-            <?php
+            echo '<div class="skyhshoso-section-content"><p>' . esc_html__('Hosting not found.', 'skyhs-hosting-solution') . '</p></div>';
             return;
         }
         
-        // Check if user has permission to access this hosting
+        // Permission Check
         $current_user_id = get_current_user_id();
         $hosting_author_id = $hosting->post_author;
         $invited_by = get_user_meta($current_user_id, 'skyhshoso_invited_by', true);
         $invited_by = is_array($invited_by) ? $invited_by : array();
         
-        if ($current_user_id != $hosting_author_id 
-            && !current_user_can('administrator')
-            && !in_array($hosting_author_id, $invited_by)) {
-            ?>
-            <div class="skyhshoso-hosting-header">
-                <p class="skyhshoso-hosting-title"><?php esc_html_e('Hosting Details', 'skyhs-hosting-solution'); ?></p>
-            </div>
-            <div class="skyhshoso-section-content">
-                <p><?php esc_html_e('You do not have permission to view this hosting information.', 'skyhs-hosting-solution'); ?></p>
-                <a href="<?php echo esc_url( add_query_arg( 'tab', 'skyhshoso_hosting', self::get_base_url() ) ); ?>" class="skyhshoso-card-button">
-                    <span><?php esc_html_e('Back to Hosting', 'skyhs-hosting-solution'); ?></span>
-                </a>
-            </div>
-            <?php
+        if ($current_user_id != $hosting_author_id && !current_user_can('administrator') && !in_array($hosting_author_id, $invited_by)) {
+            echo '<div class="skyhshoso-section-content"><p>' . esc_html__('Permission denied.', 'skyhs-hosting-solution') . '</p></div>';
             return;
         }
         
-        // Get hosting data
-        $hosting_domain = get_post_meta($hosting_id, 'skyhshoso_hosting_domain', true);
+        // Get Core Data
+        $hosting_domain = get_post_meta($hosting_id, 'skyhshoso_hosting_domain', true) ?: 'Not configured';
         $subscription_id = get_post_meta($hosting_id, 'skyhshoso_subscription_id', true);
+        $whm_user = get_post_meta($hosting_id, 'skyhshoso_hosting_username', true);
         
-        // Ensure subscription is active or pending-cancel to allow management
-        if (!empty($subscription_id)) {
-            $subscription = skyhshoso_get_subscription($subscription_id);
-            if ($subscription) {
-                $status = $subscription->get_status();
-                if (!in_array($status, array('active', 'pending-cancel'), true)) {
-                    ?>
-                    <div class="skyhshoso-hosting-header">
-                        <p class="skyhshoso-hosting-title"><?php esc_html_e('Hosting Details', 'skyhs-hosting-solution'); ?></p>
-                    </div>
-                    <div class="skyhshoso-section-content">
-                        <p><?php esc_html_e('This hosting plan is currently suspended. Please renew or reactivate your subscription to access management features.', 'skyhs-hosting-solution'); ?></p>
-                        <a href="<?php echo esc_url( add_query_arg( 'tab', 'subscriptions', self::get_base_url() ) ); ?>" class="skyhshoso-card-button">
-                            <span><?php esc_html_e('View Subscriptions', 'skyhs-hosting-solution'); ?></span>
-                        </a>
-                    </div>
-                    <?php
-                    return;
-                }
-            }
-        }
+        $server_id   = get_post_meta($hosting_id, 'skyhshoso_server_id', true);
+        $display_ip  = get_post_meta($hosting_id, '_skyhshoso_server_ip', true) ?: ($server_id ? get_post_meta($server_id, '_skyhshoso_server_ip', true) : 'Pending');
         
-        // Get subscription status
-        $subscription_status = 'inactive';
         $status_class = 'skyhshoso-status-inactive';
-        $show_login_button = false;
-        $next_payment_date = 'N/A';
-        
+        $display_status = 'Inactive';
+        $is_active = false;
+
         if (!empty($subscription_id)) {
             $subscription = skyhshoso_get_subscription($subscription_id);
             if ($subscription) {
                 $status = $subscription->get_status();
-                $subscription_status = ucwords(str_replace('-', ' ', $status));
+                $display_status = ucwords(str_replace('-', ' ', $status));
                 if (in_array($status, array('active', 'pending-cancel'))) {
                     $status_class = 'skyhshoso-status-active';
-                }
-                
-                $next_payment = $subscription->get_date('next_payment');
-                $next_payment_date = $next_payment ? gmdate('d-m-Y', strtotime($next_payment)) : 'N/A';
-                
-                // Show login button only if status is 'active' or 'pending-cancel'
-                if (in_array($status, array('active', 'pending-cancel'))) {
-                    $show_login_button = true;
+                    $is_active = true;
                 }
             }
         }
-
-        $server_id   = get_post_meta( $hosting_id, 'skyhshoso_server_id', true );
-        $server_ip   = $server_id ? get_post_meta( $server_id, '_skyhshoso_server_ip', true ) : '';
-        $server_ns   = $server_id ? get_post_meta( $server_id, '_skyhshoso_server_nameservers', true ) : array();
-        $nameservers = is_array( $server_ns ) && ! empty( array_filter( $server_ns ) ) ? $server_ns : get_option( 'skyhshoso_enom_default_nameservers', array() );
-
-        $display_ip      = get_post_meta( $hosting_id, '_skyhshoso_server_ip', true ) ?: $server_ip;
-        $display_ns_meta = get_post_meta( $hosting_id, '_skyhshoso_server_nameservers', true );
-        $display_ns      = ( is_array( $display_ns_meta ) && ! empty( array_filter( $display_ns_meta ) ) ) ? $display_ns_meta : $nameservers;
-        
         ?>
-        <div class="skyhshoso-hosting-header" style="justify-content: flex-end;">
-            <a href="<?php echo esc_url( add_query_arg( 'tab', 'skyhshoso_hosting', self::get_base_url() ) ); ?>" class="skyhshoso-button skyhshoso-button-secondary skyhshoso-back-btn">
-                <span class="skyhshoso-button-icon">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:16px;height:16px;margin-right:6px;vertical-align:middle;display:inline-block;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-                </span>
-                <span class="skyhshoso-button-text"><?php esc_html_e('Back to Hosting', 'skyhs-hosting-solution'); ?></span>
+
+        <div class="skyhshoso-hosting-header" style="justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 16px; margin-bottom: 24px;">
+            <div>
+                <h2 style="margin:0; font-size:24px; font-weight:700; color:#0f172a;"><?php echo esc_html($hosting_domain); ?></h2>
+                <span class="skyhshoso-status-btn <?php echo esc_attr($status_class); ?>" style="margin-top:8px; display:inline-block;"><?php echo esc_html($display_status); ?></span>
+            </div>
+            <a href="<?php echo esc_url( add_query_arg( 'tab', 'skyhshoso_hosting', self::get_base_url() ) ); ?>" class="skyhshoso-button skyhshoso-button-secondary">
+                <span class="skyhshoso-button-text">&larr; <?php esc_html_e('Back to List', 'skyhs-hosting-solution'); ?></span>
             </a>
         </div>
-        
-        <div class="skyhshoso-section-content">
-            <?php if (empty($hosting_domain)) : ?>
-                <!-- Domain not set, show form to add a domain -->
-                <div class="skyhshoso-detail-card">
-                    <h2 class="skyhshoso-detail-title"><?php esc_html_e('Add Domain', 'skyhs-hosting-solution'); ?></h2>
-                    <p class="skyhshoso-detail-description"><?php esc_html_e('Add a domain to your hosting plan.', 'skyhs-hosting-solution'); ?></p>
-                    
-                    <div class="skyhshoso-form-container">
-                        <form id="skyhshoso-add-domain-form" class="skyhshoso-form">
-                            <?php wp_nonce_field('skyhshoso_add_domain', 'skyhshoso_domain_nonce'); ?>
-                            <input type="hidden" name="hosting_id" value="<?php echo esc_attr($hosting_id); ?>">
-                            
-                            <div class="skyhshoso-form-group">
-                                <label for="skyhshoso_domain" class="skyhshoso-form-label"><?php esc_html_e('Domain Name:', 'skyhs-hosting-solution'); ?></label>
-                                <input type="text" id="skyhshoso_domain" name="skyhshoso_domain" class="skyhshoso-form-input" placeholder="example.com" required>
-                            </div>
-                            
-                            <div class="skyhshoso-form-actions">
-                                <button type="submit" class="skyhshoso-button skyhshoso-button-primary">
-                                    <span class="skyhshoso-button-text"><?php esc_html_e('Add Domain', 'skyhs-hosting-solution'); ?></span>
-                                </button>
-                            </div>
-                        </form>
-                        <div id="skyhshoso-form-message" class="skyhshoso-message"></div>
-                    </div>
-                </div>
+
+        <?php if (!$is_active) : ?>
+            <div class="skyhshoso-empty-message">
+                <p><?php esc_html_e('This hosting plan is currently inactive. Please renew your subscription to access the management console.', 'skyhs-hosting-solution'); ?></p>
+            </div>
+        <?php return; endif; ?>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px;">
+
+            <div class="skyhshoso-detail-card" style="margin:0; padding:24px;">
+                <h3 style="font-size:16px; font-weight:700; margin-bottom:16px; border-bottom:1px solid #f1f5f9; padding-bottom:8px;">Infrastructure</h3>
                 
-            <?php else : ?>
-                <!-- Domain is set, show hosting details -->
-                <div class="skyhshoso-detail-card">
-                    <h2 class="skyhshoso-detail-title"><?php esc_html_e('Domain Information', 'skyhs-hosting-solution'); ?></h2>
-                    
-                    <div class="skyhshoso-info-grid">
-                        <div class="skyhshoso-info-card">
-                            <div class="skyhshoso-info-icon">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" /></svg>
-                            </div>
-                            <div class="skyhshoso-info-details">
-                                <span class="skyhshoso-info-label"><?php esc_html_e('Domain', 'skyhs-hosting-solution'); ?></span>
-                                <span class="skyhshoso-info-value"><?php echo esc_html($hosting_domain); ?></span>
-                            </div>
-                        </div>
-                        <div class="skyhshoso-info-card">
-                            <div class="skyhshoso-info-icon">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
-                            </div>
-                            <div class="skyhshoso-info-details">
-                                <span class="skyhshoso-info-label"><?php esc_html_e('Status', 'skyhs-hosting-solution'); ?></span>
-                                <span class="skyhshoso-info-value">
-                                    <span class="skyhshoso-status-btn <?php echo esc_attr( $status_class ); ?>">
-                                        <?php echo esc_html($subscription_status); ?>
-                                    </span>
-                                </span>
-                            </div>
-                        </div>
-                        <div class="skyhshoso-info-card">
-                            <div class="skyhshoso-info-icon">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                            </div>
-                            <div class="skyhshoso-info-details">
-                                <span class="skyhshoso-info-label"><?php esc_html_e('Next Payment Date', 'skyhs-hosting-solution'); ?></span>
-                                <span class="skyhshoso-info-value"><?php echo esc_html($next_payment_date); ?></span>
-                            </div>
-                        </div>
-
-                        <?php if ( ! empty( $display_ip ) ) : ?>
-                        <div class="skyhshoso-info-card" style="align-items: flex-start !important;">
-                            <div class="skyhshoso-info-icon" style="margin-top: 2px !important;">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
-                            </div>
-                            <div class="skyhshoso-info-details">
-                                <span class="skyhshoso-info-label"><?php esc_html_e( 'Server IP', 'skyhs-hosting-solution' ); ?></span>
-                                <span class="skyhshoso-info-value" style="margin-top: 2px !important;">
-                                    <code style="font-family: monospace !important; font-size: 12px !important; padding: 3px 8px !important; background-color: #f1f5f9 !important; border: 1px solid #cbd5e1 !important; border-radius: 6px !important; display: inline-block !important; color: #0f172a !important; font-weight: 600 !important;"><?php echo esc_html( $display_ip ); ?></code>
-                                </span>
-                            </div>
-                        </div>
-                        <?php endif; ?>
-
-                        <?php if ( ! empty( array_filter( $display_ns ) ) ) : ?>
-                        <div class="skyhshoso-info-card" style="align-items: flex-start !important;">
-                            <div class="skyhshoso-info-icon" style="margin-top: 2px !important;">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
-                            </div>
-                            <div class="skyhshoso-info-details">
-                                <span class="skyhshoso-info-label"><?php esc_html_e( 'Nameservers', 'skyhs-hosting-solution' ); ?></span>
-                                <span class="skyhshoso-info-value" style="display: flex !important; flex-direction: column !important; gap: 6px !important; white-space: normal !important; overflow: visible !important; margin-top: 4px !important;">
-                                    <?php foreach ( array_filter( $display_ns ) as $ns ) : ?>
-                                        <code style="font-family: monospace !important; font-size: 11px !important; padding: 3px 8px !important; background-color: #f1f5f9 !important; border: 1px solid #cbd5e1 !important; border-radius: 6px !important; display: inline-block !important; width: fit-content !important; color: #334155 !important; font-weight: 500 !important; line-height: 1.2 !important; word-break: break-all !important;"><?php echo esc_html( $ns ); ?></code>
-                                    <?php endforeach; ?>
-                                </span>
-                            </div>
-                        </div>
-                        <?php endif; ?>
-                    </div>
-
-                    <div class="skyhshoso-detail-actions" style="margin-top:24px;">
-                        <?php if ($show_login_button) : ?>
-                            <button id="skyhshoso-cpanel-login-btn" class="skyhshoso-button skyhshoso-button-primary" data-hosting-id="<?php echo esc_attr($hosting_id); ?>" data-nonce="<?php echo esc_attr(wp_create_nonce('skyhshoso_generate_cpanel_login_url_nonce')); ?>">
-                                <span class="skyhshoso-button-icon">
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:16px;height:16px;margin-right:8px;vertical-align:middle;display:inline-block;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h3a3 3 0 013 3v1" /></svg>
-                                </span>
-                                <span class="skyhshoso-button-text"><?php esc_html_e('Login to cPanel', 'skyhs-hosting-solution'); ?></span>
-                            </button>
-
-                            <?php if (isset($subscription) && $status === 'active') : ?>
-                                <a href="<?php echo esc_url( add_query_arg( 'tab', 'subscriptions', self::get_base_url() ) ); ?>" class="skyhshoso-button skyhshoso-button-secondary">
-                                    <span class="skyhshoso-button-icon">
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:16px;height:16px;margin-right:8px;vertical-align:middle;display:inline-block;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                                    </span>
-                                    <span class="skyhshoso-button-text"><?php esc_html_e('Manage Subscription', 'skyhs-hosting-solution'); ?></span>
-                                </a>
-                            <?php endif; ?>
-                        <?php else : ?>
-                            <p class="skyhshoso-note"><?php esc_html_e('The cPanel login is available only for active or pending cancellation subscriptions.', 'skyhs-hosting-solution'); ?></p>
-                        <?php endif; ?>
-                    </div>
-
-                    <?php
-                    $server_id = get_post_meta( $hosting_id, 'skyhshoso_server_id', true );
-                    $whm_user  = get_post_meta( $hosting_id, 'skyhshoso_hosting_username', true );
-                    $whm_api_user  = '';
-                    $whm_api_token = '';
-                    $whm_api_host  = '';
-                    if ( $server_id && $whm_user ) :
-                        $whm_api_user  = get_post_meta( $server_id, '_skyhshoso_whm_user_id', true );
-                        $whm_api_token = get_post_meta( $server_id, '_skyhshoso_whm_token', true );
-                        $whm_api_host  = get_post_meta( $server_id, '_skyhshoso_whm_host', true );
-                    endif;
-                    ?>
-
-                    <div id="skyhshoso-cpanel-manage-<?php echo esc_attr( $hosting_id ); ?>" data-hosting-id="<?php echo esc_attr( $hosting_id ); ?>" data-nonce="<?php echo esc_attr( wp_create_nonce( 'skyhshoso_dashboard_nonce' ) ); ?>">
-                        <div style="margin-top:20px;padding:40px 0;text-align:center;color:#60768a;">
-                            <?php esc_html_e( 'Loading cPanel management...', 'skyhs-hosting-solution' ); ?>
-                        </div>
-                    </div>
-
+                <div style="margin-bottom:16px;">
+                    <span style="display:block; font-size:12px; color:#64748b; font-weight:600; text-transform:uppercase;">IP Address</span>
+                    <span style="font-size:15px; font-family:monospace; color:#0f172a;"><?php echo esc_html($display_ip); ?></span>
                 </div>
-            <?php endif; ?>
-        
+
+                <div style="margin-bottom:16px;">
+                    <span style="display:block; font-size:12px; color:#64748b; font-weight:600; text-transform:uppercase;">cPanel Username</span>
+                    <span style="font-size:15px; color:#0f172a; font-weight:500;"><?php echo esc_html($whm_user); ?></span>
+                </div>
+
+                <div id="skyhshoso-disk-usage-container" data-hosting-id="<?php echo esc_attr($hosting_id); ?>">
+                    <span style="display:block; font-size:12px; color:#64748b; font-weight:600; text-transform:uppercase;">Disk Usage</span>
+                    <div style="width:100%; background:#e2e8f0; border-radius:4px; height:8px; margin-top:6px; overflow:hidden;">
+                        <div style="width:30%; background:#94a3b8; height:100%; transition: width 0.5s;" id="skyhs-disk-bar"></div> </div>
+                    <span style="font-size:12px; color:#64748b; margin-top:4px; display:inline-block;" id="skyhs-disk-text">Loading metrics...</span>
+                </div>
+            </div>
+
+            <div class="skyhshoso-detail-card" style="margin:0; padding:24px;">
+                <h3 style="font-size:16px; font-weight:700; margin-bottom:16px; border-bottom:1px solid #f1f5f9; padding-bottom:8px;">Security & Access</h3>
+                
+                <div style="margin-bottom: 20px;">
+                    <p style="font-size:13px; color:#475569; margin:0 0 8px 0;">Access your raw server files, databases, and emails.</p>
+                    <button id="skyhshoso-cpanel-login-btn" class="skyhshoso-button skyhshoso-button-primary" style="width:100%; justify-content:center;" data-hosting-id="<?php echo esc_attr($hosting_id); ?>" data-nonce="<?php echo esc_attr(wp_create_nonce('skyhshoso_generate_cpanel_login_url_nonce')); ?>">
+                        <?php esc_html_e('Open cPanel', 'skyhs-hosting-solution'); ?>
+                    </button>
+                </div>
+
+                <div style="margin-bottom: 20px; display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <span style="display:block; font-size:14px; font-weight:600; color:#0f172a;">cPanel Password</span>
+                        <span style="font-size:12px; color:#64748b;">Update your server password.</span>
+                    </div>
+                    <button class="skyhshoso-button skyhshoso-button-secondary" id="skyhshoso-trigger-pass-reset" style="padding: 6px 12px; font-size:12px;">Reset</button>
+                </div>
+
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <span style="display:block; font-size:14px; font-weight:600; color:#0f172a;">SSH Access</span>
+                        <span style="font-size:12px; color:#64748b;">Allow terminal connections.</span>
+                    </div>
+                    <label class="skyhshoso-switch">
+                        <input type="checkbox" id="skyhshoso-ssh-toggle" data-hosting-id="<?php echo esc_attr($hosting_id); ?>">
+                        <span class="skyhshoso-slider round"></span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="skyhshoso-detail-card" style="margin:0; padding:24px; grid-column: 1 / -1;">
+                <h3 style="font-size:16px; font-weight:700; margin-bottom:16px; border-bottom:1px solid #f1f5f9; padding-bottom:8px; display:flex; align-items:center; gap:8px;">
+                    <svg style="width:20px; height:20px; color:#2563eb;" viewBox="0 0 24 24" fill="currentColor"><path d="M12.158 12.786l-2.698 7.84c.806.236 1.657.365 2.54.365 1.047 0 2.05-.18 2.986-.51-.024-.037-.046-.078-.065-.123l-2.763-7.572zm5.883-7.368c-.682-.315-1.226-.48-1.62-.48-.683 0-1.025.328-1.025.86 0 .46.205 1.05.614 1.77.368.64.914 1.83 1.637 3.56l2.185 5.86c.01-.06.015-.12.015-.18 0-2.313-1.066-6.196-1.806-11.39zm-10.748.24c-.03-.1-.06-.184-.09-.253-.133-.316-.36-.453-.68-.41-.334.043-.88.163-1.64.36l-.37-.87c1.378-.455 2.502-.682 3.37-.682.72 0 1.2.146 1.44.437.24.292.36.702.36 1.23 0 .723-.198 1.806-.593 3.25l-2.457 7.02c-.896-1.144-1.652-2.58-2.268-4.306-.328-.908-.492-1.69-.492-2.348 0-.82.164-1.428.492-1.823.328-.396.908-.63 1.74-.702l.187-.903zm8.396 7.42l-2.253-6.52c-.15-.436-.226-.816-.226-1.14 0-.356.096-.63.288-.82.192-.19.467-.286.824-.286.136 0 .313.018.53.054l.135-.88c-1.32-.206-2.355-.31-3.105-.31-.76 0-1.746.104-2.955.31l.142.87c.238-.035.422-.053.553-.053.385 0 .684.09.897.27.213.18.368.49.464.93l2.872 8.442 3.83-8.868zm-3.69-11.08c-5.522 0-10 4.477-10 10s4.478 10 10 10 10-4.477 10-10-4.478-10-10-10zm0 18.8c-4.86 0-8.8-3.94-8.8-8.8s3.94-8.8 8.8-8.8 8.8 3.94 8.8 8.8-3.94 8.8-8.8 8.8z"/></svg>
+                    WordPress Management
+                </h3>
+                
+                <div style="display:flex; gap:16px; align-items: flex-end;">
+                    <div style="flex:1;">
+                        <label style="display:block; font-size:12px; color:#64748b; font-weight:600; text-transform:uppercase; margin-bottom:8px;">Select Site to Manage</label>
+                        <select id="skyhshoso-wp-site-selector" class="skyhshoso-form-input" style="width:100%; padding:10px;">
+                            <option value="">Scanning server for WordPress sites...</option>
+                            </select>
+                    </div>
+                    <button id="skyhshoso-wp-sso-btn" class="skyhshoso-button skyhshoso-button-primary" disabled style="opacity:0.5; cursor:not-allowed;">
+                        <?php esc_html_e('Log into WP Admin', 'skyhs-hosting-solution'); ?>
+                    </button>
+                </div>
+            </div>
+
+        </div>
+
+        <div id="skyhshoso-pass-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.6); z-index:9999; align-items:center; justify-content:center;">
+            <div style="background:#fff; padding:24px; border-radius:12px; width:100%; max-width:400px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.1);">
+                <h3 style="margin-top:0; font-size:18px; color:#0f172a;">Reset cPanel Password</h3>
+                <p style="font-size:13px; color:#64748b;">Enter a new secure password for user <strong><?php echo esc_html($whm_user); ?></strong>.</p>
+                
+                <input type="password" id="skyhs-new-pass" placeholder="New Password" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:6px; margin-bottom:16px; box-sizing:border-box;">
+                
+                <div style="display:flex; justify-content:flex-end; gap:12px;">
+                    <button id="skyhshoso-cancel-pass" class="skyhshoso-button skyhshoso-button-secondary">Cancel</button>
+                    <button id="skyhshoso-save-pass" class="skyhshoso-button skyhshoso-button-primary" data-hosting-id="<?php echo esc_attr($hosting_id); ?>">Save Password</button>
+                </div>
+            </div>
+        </div>
+
+        <style>
+            .skyhshoso-switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+            .skyhshoso-switch input { opacity: 0; width: 0; height: 0; }
+            .skyhshoso-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #cbd5e1; transition: .4s; }
+            .skyhshoso-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; }
+            input:checked + .skyhshoso-slider { background-color: #2563eb; }
+            input:checked + .skyhshoso-slider:before { transform: translateX(20px); }
+            .skyhshoso-slider.round { border-radius: 24px; }
+            .skyhshoso-slider.round:before { border-radius: 50%; }
+        </style>
         <?php
     }
     

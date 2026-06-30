@@ -596,25 +596,33 @@ class SkyHSHOSO_Emails {
 		switch ( $type ) {
 			case 'provisioning':
 				return '<html>
-			<body style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;padding:20px;color:#1d2327;">
+			<body style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;padding:20px;color:#1d2327;background-color:#f0f0f1;">
 				<div style="max-width:600px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
 					<div style="background:#2271b1;color:#fff;padding:30px;text-align:center;">
 						<h1 style="margin:0;font-size:22px;">' . esc_html__( 'Hosting Account Details', 'skyhs-hosting-solution' ) . '</h1>
 					</div>
 					<div style="padding:30px;">
-						<p>' . sprintf( esc_html__( 'Your hosting account setup on %s is complete. Below are the details for your new service:', 'skyhs-hosting-solution' ), '{{site_name}}' ) . '</p>
+						<p>' . sprintf( esc_html__( 'Your hosting account setup on %s is complete. <strong>Great news: your WordPress site has been automatically pre-installed and is ready to use!</strong>', 'skyhs-hosting-solution' ), '{{site_name}}' ) . '</p>
+						<p>' . esc_html__( 'Below are the infrastructure details for your new service:', 'skyhs-hosting-solution' ) . '</p>
+						
 						<table style="width:100%;border-collapse:collapse;margin:20px 0;">
-							<tr><td style="padding:8px 0;font-weight:600;width:140px;">' . esc_html__( 'Domain:', 'skyhs-hosting-solution' ) . '</td><td style="padding:8px 0;">{{domain}}</td></tr>
-							<tr><td style="padding:8px 0;font-weight:600;">' . esc_html__( 'Plan:', 'skyhs-hosting-solution' ) . '</td><td style="padding:8px 0;">{{plan}}</td></tr>
-							<tr><td style="padding:8px 0;font-weight:600;">' . esc_html__( 'Server:', 'skyhs-hosting-solution' ) . '</td><td style="padding:8px 0;">{{server_name}}</td></tr>
-							<tr><td style="padding:8px 0;font-weight:600;">' . esc_html__( 'Server IP:', 'skyhs-hosting-solution' ) . '</td><td style="padding:8px 0;"><code>{{server_ip}}</code></td></tr>
-							<tr><td style="padding:8px 0;font-weight:600;">' . esc_html__( 'cPanel URL:', 'skyhs-hosting-solution' ) . '</td><td style="padding:8px 0;">{{cpanel_url}}</td></tr>
-							<tr><td style="padding:8px 0;font-weight:600;">' . esc_html__( 'Username:', 'skyhs-hosting-solution' ) . '</td><td style="padding:8px 0;">{{username}}</td></tr>
-							<tr><td style="padding:8px 0;font-weight:600;">' . esc_html__( 'Password:', 'skyhs-hosting-solution' ) . '</td><td style="padding:8px 0;"><code>{{password}}</code></td></tr>
+							<tr><td style="padding:8px 0;font-weight:600;width:140px;border-bottom:1px solid #f0f0f1;">' . esc_html__( 'Domain:', 'skyhs-hosting-solution' ) . '</td><td style="padding:8px 0;border-bottom:1px solid #f0f0f1;">{{domain}}</td></tr>
+							<tr><td style="padding:8px 0;font-weight:600;border-bottom:1px solid #f0f0f1;">' . esc_html__( 'Plan:', 'skyhs-hosting-solution' ) . '</td><td style="padding:8px 0;border-bottom:1px solid #f0f0f1;">{{plan}}</td></tr>
+							<tr><td style="padding:8px 0;font-weight:600;border-bottom:1px solid #f0f0f1;">' . esc_html__( 'Server:', 'skyhs-hosting-solution' ) . '</td><td style="padding:8px 0;border-bottom:1px solid #f0f0f1;">{{server_name}}</td></tr>
+							<tr><td style="padding:8px 0;font-weight:600;border-bottom:1px solid #f0f0f1;">' . esc_html__( 'Server IP:', 'skyhs-hosting-solution' ) . '</td><td style="padding:8px 0;border-bottom:1px solid #f0f0f1;"><code>{{server_ip}}</code></td></tr>
+							<tr><td style="padding:8px 0;font-weight:600;border-bottom:1px solid #f0f0f1;">' . esc_html__( 'cPanel URL:', 'skyhs-hosting-solution' ) . '</td><td style="padding:8px 0;border-bottom:1px solid #f0f0f1;">{{cpanel_url}}</td></tr>
+							<tr><td style="padding:8px 0;font-weight:600;border-bottom:1px solid #f0f0f1;">' . esc_html__( 'Username:', 'skyhs-hosting-solution' ) . '</td><td style="padding:8px 0;border-bottom:1px solid #f0f0f1;">{{username}}</td></tr>
+							<tr><td style="padding:8px 0;font-weight:600;border-bottom:1px solid #f0f0f1;">' . esc_html__( 'Password:', 'skyhs-hosting-solution' ) . '</td><td style="padding:8px 0;border-bottom:1px solid #f0f0f1;"><code>{{password}}</code></td></tr>
 						</table>
-						<p style="font-size:13px;color:#646970;">' . esc_html__( 'Please save your login details and change your password after first login.', 'skyhs-hosting-solution' ) . '</p>
+						
+						<p style="font-size:13px;color:#646970;margin-bottom:25px;">' . esc_html__( 'Please save your login details. You can change your password at any time from your Cielocloud dashboard.', 'skyhs-hosting-solution' ) . '</p>
+						
+						<div style="text-align:center;margin:35px 0;">
+							<a href="https://cielocloud.org/hosting" style="background:#2271b1;color:#fff;padding:14px 28px;text-decoration:none;border-radius:4px;font-weight:600;font-size:16px;display:inline-block;">' . esc_html__( 'Manage My Hosting & WordPress', 'skyhs-hosting-solution' ) . '</a>
+						</div>
+						
 						<p><strong>' . esc_html__( 'Nameservers:', 'skyhs-hosting-solution' ) . '</strong></p>
-						<p>{{nameservers}}</p>
+						<p style="margin-top:5px;">{{nameservers}}</p>
 					</div>
 				</div>
 			</body>

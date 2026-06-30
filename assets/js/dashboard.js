@@ -1,11 +1,10 @@
 /**
  * SkyHS Dashboard JavaScript
- * All frontend dashboard functionality. Unified and deduplicated.
+ * Unified and deduplicated version.
  */
 (function() {
     'use strict';
 
-    // Load localized config from skyhshosoDashboard or fallback to global globals
     var config = {
         ajaxUrl: typeof skyhshosoDashboard !== 'undefined' && skyhshosoDashboard.ajaxUrl ? skyhshosoDashboard.ajaxUrl : (typeof ajaxurl !== 'undefined' ? ajaxurl : '/wp-admin/admin-ajax.php'),
         collaboratorNonce: typeof skyhshosoDashboard !== 'undefined' && skyhshosoDashboard.collaboratorNonce ? skyhshosoDashboard.collaboratorNonce : '',
@@ -14,9 +13,6 @@
         i18n: typeof skyhshosoDashboard !== 'undefined' && skyhshosoDashboard.i18n ? skyhshosoDashboard.i18n : {}
     };
 
-    /**
-     * 1. Account Redirect Handler
-     */
     function initRedirect() {
         var redirectEl = document.getElementById('skyhshoso-redirect-url');
         if (redirectEl && redirectEl.dataset.url) {
@@ -24,9 +20,6 @@
         }
     }
 
-    /**
-     * 2. Initialize general search inputs with clear triggers
-     */
     function initSearchInputs() {
         var searchInputs = document.querySelectorAll('.skyhshoso-search-input');
         searchInputs.forEach(function(input) {
@@ -47,9 +40,6 @@
         });
     }
 
-    /**
-     * 3. Server-side Paginated Search/Filter System (AJAX-based)
-     */
     function setupPagination(cfg) {
         var container = document.getElementById(cfg.paginationContainerId);
         var tbody = cfg.tbodyId ? document.getElementById(cfg.tbodyId) : null;
@@ -95,9 +85,7 @@
                     if (callback) callback(d.data);
                 }
             })
-            .catch(function() {
-                // Silently fail — keep existing content
-            });
+            .catch(function() {});
         }
 
         function renderControls() {
@@ -109,9 +97,7 @@
             prevBtn.innerHTML = '&laquo;';
             prevBtn.disabled = currentPage === 1;
             prevBtn.addEventListener('click', function() {
-                if (currentPage > 1) {
-                    fetchPage(currentPage - 1, searchTerm);
-                }
+                if (currentPage > 1) fetchPage(currentPage - 1, searchTerm);
             });
             container.appendChild(prevBtn);
 
@@ -119,14 +105,10 @@
                 (function(pageNum) {
                     var pageBtn = document.createElement('button');
                     pageBtn.className = 'skyhshoso-pagination-btn';
-                    if (pageNum === currentPage) {
-                        pageBtn.classList.add('active');
-                    }
+                    if (pageNum === currentPage) pageBtn.classList.add('active');
                     pageBtn.innerText = pageNum;
                     pageBtn.addEventListener('click', function() {
-                        if (pageNum !== currentPage) {
-                            fetchPage(pageNum, searchTerm);
-                        }
+                        if (pageNum !== currentPage) fetchPage(pageNum, searchTerm);
                     });
                     container.appendChild(pageBtn);
                 })(i);
@@ -137,9 +119,7 @@
             nextBtn.innerHTML = '&raquo;';
             nextBtn.disabled = currentPage === totalPages;
             nextBtn.addEventListener('click', function() {
-                if (currentPage < totalPages) {
-                    fetchPage(currentPage + 1, searchTerm);
-                }
+                if (currentPage < totalPages) fetchPage(currentPage + 1, searchTerm);
             });
             container.appendChild(nextBtn);
         }
@@ -153,13 +133,9 @@
                 }, 300);
             });
         }
-
         renderControls();
     }
 
-    /**
-     * 5. Pricing & Period Toggle Sliders
-     */
     function initPeriodToggle() {
         var toggles = document.querySelectorAll('.skyhshoso-material-toggle-input');
         var slider = document.querySelector('.skyhshoso-material-toggle-slider');
@@ -182,7 +158,6 @@
             });
         });
 
-        // Init state
         var initChecked = document.querySelector('.skyhshoso-material-toggle-input:checked');
         if (initChecked) {
             sync(initChecked);
@@ -198,9 +173,6 @@
         });
     }
 
-    /**
-     * 6. Add Domain Form Controller (Unified Single Handler)
-     */
     function initAddDomainForm() {
         var form = document.getElementById('skyhshoso-add-domain-form');
         var msgDiv = document.getElementById('skyhshoso-form-message');
@@ -221,8 +193,6 @@
 
             var fd = new FormData(form);
             fd.append('action', 'skyhshoso_add_domain');
-            
-            // Fetch correct nonce from standard WP output
             var nEl = document.getElementById('skyhshoso_domain_nonce');
             if (nEl) fd.append('nonce', nEl.value);
 
@@ -258,9 +228,6 @@
         });
     }
 
-    /**
-     * 7. cPanel Login (Injecting extracted nonces)
-     */
     function initCPanelLogin() {
         var btn = document.getElementById('skyhshoso-cpanel-login-btn');
         if (!btn) return;
@@ -274,7 +241,6 @@
             var fd = new FormData();
             fd.append('action', 'skyhshoso_generate_cpanel_login_url');
             fd.append('hosting_id', btn.getAttribute('data-hosting-id'));
-            // CRITICAL FIX: Load nonce from data attribute
             fd.append('nonce', btn.getAttribute('data-nonce'));
 
             fetch(config.ajaxUrl, {
@@ -299,9 +265,6 @@
         });
     }
 
-    /**
-     * 8. Collaborator Management (Unified Controller)
-     */
     function initCollaborators() {
         var openBtn = document.getElementById('skyhshoso-new-collaborator-btn');
         var cancelBtn = document.getElementById('skyhshoso-cancel-invite');
@@ -312,7 +275,6 @@
         var msgDiv = document.getElementById('skyhshoso-invite-message');
         var mailInp = document.getElementById('invitee_email');
 
-        // Styling interactions
         if (mailInp) {
             var handleActive = function() {
                 if (mailInp.value.trim() !== '') {
@@ -327,7 +289,6 @@
             handleActive();
         }
 
-        // Toggle view
         if (openBtn && formCont) {
             openBtn.addEventListener('click', function() {
                 formCont.style.display = 'block';
@@ -341,7 +302,6 @@
             });
         }
 
-        // Form Submission
         if (invForm) {
             invForm.addEventListener('submit', function(e) {
                 e.preventDefault();
@@ -397,7 +357,6 @@
             });
         }
 
-        // Removal Handling via delegation
         document.addEventListener('click', function(e) {
             var lk = e.target.closest('.skyhshoso-remove-invite');
             if (!lk) return;
@@ -419,7 +378,6 @@
             });
         });
 
-        // Inner list refresh helper
         function refreshList() {
             if (!listCont) return;
             var fd = new FormData();
@@ -433,7 +391,6 @@
                 listCont.innerHTML = '';
                 var loaded = false;
 
-                // 1. Render Invited Users
                 if (d.data.skyhshoso_invited_users && d.data.skyhshoso_invited_users.length > 0) {
                     loaded = true;
                     var sec = document.createElement('div');
@@ -455,7 +412,6 @@
                     listCont.appendChild(sec);
                 }
 
-                // 2. Render Inviting Users
                 if (d.data.skyhshoso_invited_by && d.data.skyhshoso_invited_by.length > 0) {
                     loaded = true;
                     var sec2 = document.createElement('div');
@@ -482,21 +438,8 @@
                 }
             });
         }
-
-        function escapeHtml(text) {
-            var div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
     }
 
-    /**
-     * 9. Subscription Variation Switcher (Dropdown → Checkout)
-     *
-     * User selects a variation from the dropdown, clicks "Switch Plan",
-     * AJAX adds the switch item to cart, then JS redirects to checkout.
-     * Payment and switch processing are handled by the existing switcher.
-     */
     function initSubscriptionSwitcher() {
         var containers = document.querySelectorAll('.skyhshoso-switch-container');
         if (!containers.length) return;
@@ -511,11 +454,9 @@
 
             if (!select || !switchBtn) return;
 
-            // Find the initial (current) value.
             var currentOption = select.querySelector('option[data-current="1"]');
             var currentValue  = currentOption ? currentOption.value : select.value;
 
-            // Show/hide button when a different variation is selected.
             select.addEventListener('change', function() {
                 if (this.value !== currentValue) {
                     switchBtn.style.display = 'inline-flex';
@@ -528,12 +469,10 @@
                 }
             });
 
-            // Switch button → add to cart via AJAX → redirect to checkout.
             switchBtn.addEventListener('click', function() {
                 var newVariationId = select.value;
                 if (newVariationId === currentValue) return;
 
-                // Show loading state.
                 btnText.style.display = 'none';
                 spinner.style.display = 'inline-block';
                 switchBtn.disabled = true;
@@ -549,22 +488,17 @@
                     method: 'POST',
                     body: new URLSearchParams(fd)
                 })
-                .then(function(r) {
-                    return r.json();
-                })
+                .then(function(r) { return r.json(); })
                 .then(function(d) {
                     if (d.success && d.data.checkout_url) {
-                        // Redirect to checkout for payment.
                         window.location.href = d.data.checkout_url;
                     } else {
-                        // Show error — reset loading state.
                         spinner.style.display = 'none';
                         btnText.style.display = 'inline';
                         switchBtn.disabled = false;
                         select.disabled = false;
 
                         var errMsg = (d.data && d.data.message) || 'Unknown error from server.';
-
                         if (msgDiv) {
                             msgDiv.className = 'skyhshoso-switch-message skyhshoso-switch-error';
                             msgDiv.innerHTML = errMsg;
@@ -588,9 +522,6 @@
         });
     }
 
-    /**
-     * 10. Dashboard tab stats grid (quick summary)
-     */
     function initDashboardStats() {
         document.querySelectorAll('[id^="skyhshoso-stats-grid-"]').forEach(function(grid) {
             var hostingId = grid.getAttribute('data-hosting-id');
@@ -629,12 +560,89 @@
         containers.forEach(function(el) {
             var hostingId = el.getAttribute('data-hosting-id');
             var nonce = el.getAttribute('data-nonce');
+            
             el.innerHTML = '<div style="padding:30px;text-align:center;color:#60768a;"><div class="skyhshoso-spinner"></div><p style="margin-top:12px;">Loading cPanel data...</p></div>';
 
             fetchManageData(hostingId, nonce, function(data) {
                 renderManageDashboard(el, hostingId, nonce, data);
+                attachManageDashboardListeners(el, hostingId, nonce);
             });
         });
+    }
+
+    function attachManageDashboardListeners(el, hostingId, nonce) {
+        // Password Reset Trigger
+        var passBtn = el.querySelector('#skyhshoso-trigger-pass-reset');
+        var modal = el.querySelector('#skyhshoso-pass-modal');
+        if (passBtn && modal) {
+            passBtn.addEventListener('click', function() { modal.style.display = 'flex'; });
+            el.querySelector('#skyhshoso-cancel-pass').addEventListener('click', function() { modal.style.display = 'none'; });
+            el.querySelector('#skyhshoso-save-pass').addEventListener('click', function() {
+                var newPass = el.querySelector('#skyhs-new-pass').value;
+                
+                var fd = new FormData();
+                fd.append('action', 'skyhshoso_reset_password');
+                fd.append('hosting_id', hostingId);
+                fd.append('new_password', newPass);
+                fd.append('nonce', nonce);
+
+                fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fd) })
+                .then(r => r.json())
+                .then(d => {
+                    alert(d.data.message);
+                    modal.style.display = 'none';
+                });
+            });
+        }
+
+        // SSH Toggle Trigger
+        var sshToggle = el.querySelector('#skyhshoso-ssh-toggle');
+        if (sshToggle) {
+            sshToggle.addEventListener('change', function() {
+                var state = this.checked ? 'enable' : 'disable';
+                
+                var fd = new FormData();
+                fd.append('action', 'skyhshoso_toggle_ssh');
+                fd.append('hosting_id', hostingId);
+                fd.append('action_state', state);
+                fd.append('nonce', nonce);
+
+                fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fd) })
+                .then(r => r.json())
+                .then(d => { alert(d.data.message); });
+            });
+        }
+
+        // Assign Custom Domain Trigger
+        var assignDomainBtn = el.querySelector('#skyhshoso-assign-domain-btn');
+        if (assignDomainBtn) {
+            assignDomainBtn.onclick = function() {
+                var newDomain = prompt("Enter your custom domain (e.g., mywebsite.com):");
+                if (!newDomain) return;
+
+                var origText = this.textContent;
+                this.textContent = 'Assigning & Migrating... Please wait.';
+                this.disabled = true;
+
+                var fd = new FormData();
+                fd.append('action', 'skyhshoso_assign_custom_domain');
+                fd.append('hosting_id', hostingId);
+                fd.append('new_domain', newDomain);
+                fd.append('nonce', nonce);
+
+                fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fd) })
+                .then(r => r.json())
+                .then(d => {
+                    alert(d.data ? d.data.message : 'Complete');
+                    location.reload(); 
+                })
+                .catch(err => {
+                    alert('An error occurred during domain assignment.');
+                    this.textContent = origText;
+                    this.disabled = false;
+                });
+            };
+        }
     }
 
     function fetchManageData(hostingId, nonce, callback) {
@@ -841,9 +849,6 @@
         return div.innerHTML;
     }
 
-    /**
-     * Main Entry Point - Unified initialization
-     */
     /**
      * 15. WordPress Site Provisioning
      */
