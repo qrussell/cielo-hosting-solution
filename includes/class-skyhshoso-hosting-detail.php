@@ -68,17 +68,52 @@ class SkyHSHOSO_Hosting_Detail {
             return;
         }
 
-        // Check if this hosting already has a cPanel account (connected via admin)
+        // Check if this hosting already has a cPanel account
         $existing_username = get_post_meta($hosting_id, 'skyhshoso_hosting_username', true);
         $account_source = get_post_meta($hosting_id, '_skyhshoso_hosting_account_source', true);
 
-        if ( ! empty( $existing_username ) && 'existing' === $account_source ) {
-            // Already linked to an existing account — just update domain
-            update_post_meta($hosting_id, 'skyhshoso_hosting_domain', $domain);
-            wp_send_json_success(array(
-                'message' => 'Domain added to existing cPanel account.',
-                'skyhshoso_domain' => $domain
-            ));
+        if ( ! empty( $existing_username ) ) {
+            
+            // If it was manually imported via admin, just update the post meta
+            if ( 'existing' === $account_source ) {
+                update_post_meta($hosting_id, 'skyhshoso_hosting_domain', $domain);
+                wp_send_json_success(array(
+                    'message' => 'Domain updated on existing imported cPanel account.',
+                    'skyhshoso_domain' => $domain
+                ));
+                return;
+            }
+
+            // For active WooCommerce accounts, add this as an Addon Domain to the existing cPanel
+            $server_id = get_post_meta($hosting_id, 'skyhshoso_server_id', true);
+            $whm_username = get_post_meta($server_id, '_skyhshoso_whm_user_id', true);
+            $whm_token = get_post_meta($server_id, '_skyhshoso_whm_token', true);
+            $whm_host = get_post_meta($server_id, '_skyhshoso_whm_host', true);
+
+            $whm_integration = new SkyHSHOSO_WHM_API($whm_username, $whm_token, $whm_host);
+            
+            // Extract subdomain prefix from the domain (e.g., 'example' from 'example.com')
+            $subdomain_prefix = explode('.', $domain)[0];
+
+            $result = $whm_integration->cpanel_uapi_call_v3(
+                $existing_username, 
+                'AddonDomain', 
+                'addaddondomain', 
+                array(
+                    'dir' => 'public_html/' . $domain,
+                    'newdomain' => $domain,
+                    'subdomain' => $subdomain_prefix
+                )
+            );
+
+            if ( $result !== false ) {
+                wp_send_json_success(array(
+                    'message' => 'Domain successfully added to your existing cPanel account as an Addon Domain.',
+                    'skyhshoso_domain' => $domain
+                ));
+            } else {
+                wp_send_json_error(array('message' => 'Failed to add domain to your existing cPanel account. Please contact support.'));
+            }
             return;
         }
 
