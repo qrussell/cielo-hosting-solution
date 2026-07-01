@@ -270,6 +270,13 @@ class SkyHSHOSO_Hosting_Manager {
         }
 
         $hosting_id = isset( $_POST['hosting_id'] ) ? intval( $_POST['hosting_id'] ) : 0;
+        
+        // Capture old plan BEFORE updating meta, so we can detect an upgrade/downgrade
+        $old_plan = '';
+        if ( $hosting_id ) {
+            $old_plan = get_post_meta( $hosting_id, 'skyhshoso_hosting_plan', true );
+        }
+
         $title      = isset( $_POST['title'] ) ? sanitize_text_field( wp_unslash( $_POST['title'] ) ) : '';
         $product_id = isset( $_POST['product_id'] ) ? sanitize_text_field( wp_unslash( $_POST['product_id'] ) ) : '';
         $owner_id   = isset( $_POST['owner_id'] ) ? intval( $_POST['owner_id'] ) : 0;
@@ -440,6 +447,39 @@ class SkyHSHOSO_Hosting_Manager {
                 $provision_msg = ' WHM account creation skipped: Missing server credentials.';
             }
         }
+
+        // --- UPGRADE/DOWNGRADE: TRIGGER WHM IF PLAN CHANGED ON EXISTING ACCOUNT ---
+        if ( $hosting_id && ! empty( $old_plan ) && ! empty( $hosting_plan ) && $old_plan !== $hosting_plan ) {
+            $username = get_post_meta( $hosting_id, 'skyhshoso_hosting_username', true );
+
+            if ( ! empty( $username ) && ! empty( $server_id ) ) {
+                $whm_username = get_post_meta( $server_id, '_skyhshoso_whm_user_id', true );
+                $whm_token = get_post_meta( $server_id, '_skyhshoso_whm_token', true );
+                $whm_host = get_post_meta( $server_id, '_skyhshoso_whm_host', true );
+
+                if ( $whm_username && $whm_token && $whm_host ) {
+                    if ( ! class_exists( 'SkyHSHOSO_WHM_API' ) ) {
+                        require_once dirname( __FILE__ ) . '/class-whm-integration.php';
+                    }
+                    $whm_api = new SkyHSHOSO_WHM_API( $whm_username, $whm_token, $whm_host );
+
+                    $change_result = $whm_api->change_account_plan( $username, $hosting_plan );
+
+                    if ( $change_result ) {
+                        $provision_msg .= ' WHM package updated to ' . esc_html( $hosting_plan ) . '.';
+                        if ( class_exists( 'SkyHSHOSO_Logger' ) ) {
+                            SkyHSHOSO_Logger::info( "Admin changed plan for $username from $old_plan to $hosting_plan via Hosting Manager." );
+                        }
+                    } else {
+                        $provision_msg .= ' However, WHM failed to update the package to ' . esc_html( $hosting_plan ) . '.';
+                        if ( class_exists( 'SkyHSHOSO_Logger' ) ) {
+                            SkyHSHOSO_Logger::error( "Failed to change WHM plan for $username to $hosting_plan via Hosting Manager." );
+                        }
+                    }
+                }
+            }
+        }
+
 
         // Handle Subscription Action
         $sub_creation_msg = '';
@@ -768,10 +808,12 @@ class SkyHSHOSO_Hosting_Manager {
             }
 
             if ( $product->is_type( 'simple' ) || $product->is_type( 'subscription' ) ) {
-                // FIXED: Use get_price_html() directly instead of get_price() to ensure proper formatting
-                $price_html = wp_strip_all_tags( $product->get_price_html() );
-                if ( empty($price_html) ) {
-                    $price_html = 'Free';
+                $raw_price_html = $product->get_price_html();
+                $clean_price_html = preg_replace('/<del>.*?<\/del>/is', '', $raw_price_html);
+                $price_text = trim(html_entity_decode(wp_strip_all_tags($clean_price_html), ENT_QUOTES, 'UTF-8'));
+                
+                if ( empty($price_text) ) {
+                    $price_text = 'Free';
                 }
                 
                 $server_id = get_post_meta( $product->get_id(), '_skyhshoso_server_id', true );
@@ -779,7 +821,7 @@ class SkyHSHOSO_Hosting_Manager {
 
                 $products[] = array(
                     'id'           => strval( $product->get_id() ),
-                    'label'        => $product->get_name() . ' — ' . $price_html,
+                    'label'        => $product->get_name() . ' — ' . $price_text,
                     'server_id'    => $server_id ?: '',
                     'plan'         => $plan ?: '',
                 );
@@ -804,16 +846,18 @@ class SkyHSHOSO_Hosting_Manager {
                         break; // Use first attribute as plan name
                     }
 
-                    // FIXED: Use get_price_html() natively
-                    $price_html = wp_strip_all_tags( $variation->get_price_html() );
-                    if ( empty($price_html) ) {
-                        $price_html = 'Free';
+                    $raw_price_html = $variation->get_price_html();
+                    $clean_price_html = preg_replace('/<del>.*?<\/del>/is', '', $raw_price_html);
+                    $price_text = trim(html_entity_decode(wp_strip_all_tags($clean_price_html), ENT_QUOTES, 'UTF-8'));
+                    
+                    if ( empty($price_text) ) {
+                        $price_text = 'Free';
                     }
                     
                     $server_id = get_post_meta( $product->get_id(), '_skyhshoso_server_id', true );
                     $hosting_plan = get_post_meta( $variation->get_id(), '_skyhshoso_hosting_plan', true );
 
-                    $label = $product->get_name() . ' » ' . $plan_name . ' — ' . $price_html;
+                    $label = $product->get_name() . ' » ' . $plan_name . ' — ' . $price_text;
 
                     $products[] = array(
                         'id'           => $product->get_id() . '|' . $variation->get_id(),

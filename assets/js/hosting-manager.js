@@ -277,6 +277,7 @@ jQuery(document).ready(function($) {
     // "Add Hosting" button — open form panel in create mode
     $('#hm-add-hosting-btn').on('click', function() {
         resetForm();
+        $('#skyhshoso-hm-form-title').text('Create Hosting Account');
         $formPanel.slideDown(250);
         $('html, body').animate({ scrollTop: $formPanel.offset().top - 40 }, 250);
     });
@@ -500,8 +501,14 @@ jQuery(document).ready(function($) {
             '  </td>' +
             '  <td style="color:#4b5563; font-size:13px;">' + escapeHtml(h.server_title) + '<br/><span style="font-size:11px;color:#6b7280;">' + cpanelDisplay + '</span></td>' +
             '  <td style="text-align:right;">' +
-            '    <div style="display:inline-flex; gap:6px;">' +
-            '      <button class="hm-btn-edit button button-small" data-id="' + h.id + '">' + escapeHtml(__('Edit', 'skyhs-hosting-solution')) + '</button>' +
+            '    <div style="display:inline-flex; gap:6px;">';
+
+        // ADDED: The "Open cPanel" SSO Button logic
+        if (h.cpanel_username) {
+            rowHtml += '      <button class="hm-btn-cpanel button button-small" data-id="' + h.id + '"><span class="dashicons dashicons-external" style="margin-top:2px;"></span> cPanel</button>';
+        }
+
+        rowHtml += '      <button class="hm-btn-edit button button-small" data-id="' + h.id + '">' + escapeHtml(__('Edit', 'skyhs-hosting-solution')) + '</button>' +
             '      <button class="hm-btn-sync button button-small" data-id="' + h.id + '">' + escapeHtml(__('Sync', 'skyhs-hosting-solution')) + '</button>' +
             '      <button class="hm-btn-delete button button-small" data-id="' + h.id + '">' + escapeHtml(__('Delete', 'skyhs-hosting-solution')) + '</button>' +
             '    </div>' +
@@ -510,6 +517,34 @@ jQuery(document).ready(function($) {
 
         return $(rowHtml);
     }
+
+    // === NEW: Open cPanel Click Handler ===
+    $container.on('click', '.hm-btn-cpanel', function(e) {
+        e.preventDefault();
+        var id = $(this).data('id');
+        var $btn = $(this);
+        var origText = $btn.html();
+        
+        $btn.html('<span class="spinner is-active" style="float:none;margin:0;"></span>').prop('disabled', true);
+
+        var data = {
+            action: 'skyhshoso_generate_cpanel_login_url',
+            hosting_id: id,
+            nonce: skyhshoso_hm.nonce_cpanel_accounts // Using this nonce as proxy for backend validation
+        };
+
+        $.post(skyhshoso_hm.ajax_url, data, function(res) {
+            $btn.html(origText).prop('disabled', false);
+            if (res.success && res.data.login_url) {
+                window.open(res.data.login_url, '_blank');
+            } else {
+                alert(res.data ? res.data.message : 'Failed to generate cPanel session.');
+            }
+        }).fail(function() {
+            $btn.html(origText).prop('disabled', false);
+            alert('Connection error.');
+        });
+    });
 
     // Edit button click
     $container.on('click', '.hm-btn-edit', function(e) {
