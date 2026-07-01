@@ -228,39 +228,55 @@
         });
     }
 
+    // --- BULLETPROOF CPANEL LOGIN HANDLER ---
     function initCPanelLogin() {
-        var btn = document.getElementById('skyhshoso-cpanel-login-btn');
-        if (!btn) return;
+        var btns = document.querySelectorAll('#skyhshoso-cpanel-login-btn, .skyhshoso-cpanel-login-btn, .hm-cpanel-login-btn');
+        if (!btns.length) return;
 
-        btn.addEventListener('click', function() {
-            var txt = btn.querySelector('.skyhshoso-button-text');
-            var orig = txt.textContent;
-            txt.textContent = 'Loading...';
-            btn.disabled = true;
+        btns.forEach(function(btn) {
+            // Remove existing listeners by cloning (prevents double-clicks)
+            var newBtn = btn.cloneNode(true);
+            btn.parentNode.replaceChild(newBtn, btn);
 
-            var fd = new FormData();
-            fd.append('action', 'skyhshoso_generate_cpanel_login_url');
-            fd.append('hosting_id', btn.getAttribute('data-hosting-id'));
-            fd.append('nonce', btn.getAttribute('data-nonce'));
-
-            fetch(config.ajaxUrl, {
-                method: 'POST',
-                body: new URLSearchParams(fd)
-            })
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                if (d.success && d.data && d.data.login_url) {
-                    window.open(d.data.login_url, '_blank');
+            newBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                var txt = newBtn.querySelector('.skyhshoso-button-text');
+                var origText = txt ? txt.textContent : newBtn.textContent;
+                
+                if (txt) {
+                    txt.textContent = 'Connecting...';
                 } else {
-                    alert('Failed to generate login URL: ' + (d.data ? d.data.message : 'Unauthorized'));
+                    newBtn.textContent = 'Connecting...';
                 }
-                txt.textContent = orig;
-                btn.disabled = false;
-            })
-            .catch(function() {
-                alert('A connection error occurred.');
-                txt.textContent = orig;
-                btn.disabled = false;
+                newBtn.disabled = true;
+
+                var hostingId = newBtn.getAttribute('data-hosting-id');
+                var nonce = newBtn.getAttribute('data-nonce') || config.dashboardNonce;
+
+                var fd = new FormData();
+                fd.append('action', 'skyhshoso_generate_cpanel_login_url');
+                fd.append('hosting_id', hostingId);
+                fd.append('nonce', nonce);
+
+                fetch(config.ajaxUrl, {
+                    method: 'POST',
+                    body: new URLSearchParams(fd)
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    if (d.success && d.data && d.data.login_url) {
+                        window.open(d.data.login_url, '_blank');
+                    } else {
+                        alert('Failed to connect: ' + (d.data ? d.data.message : 'Unauthorized'));
+                    }
+                    if (txt) txt.textContent = origText; else newBtn.textContent = origText;
+                    newBtn.disabled = false;
+                })
+                .catch(function() {
+                    alert('A connection error occurred.');
+                    if (txt) txt.textContent = origText; else newBtn.textContent = origText;
+                    newBtn.disabled = false;
+                });
             });
         });
     }
@@ -552,9 +568,6 @@
         });
     }
 
-    /**
-     * 11. WHMCS-style cPanel Management Dashboard
-     */
     function initCpanelDashboard() {
         var containers = document.querySelectorAll('[id^="skyhshoso-cpanel-manage-"]');
         containers.forEach(function(el) {
@@ -775,9 +788,7 @@
                 .then(function(d) {
                     card.classList.remove('skyhshoso-cpanel-card-loading');
                     iconContainer.innerHTML = origHtml;
-                    console.log('=== SKYHS CPANEL SECTION RESPONSE ===', d);
                     if (d.success && d.data && d.data.url) {
-                        console.log('Opening section URL:', d.data.url);
                         window.open(d.data.url, '_blank');
                     } else {
                         alert('Could not open this section. Try logging in to cPanel directly.');
@@ -786,7 +797,6 @@
                 .catch(function(err) {
                     card.classList.remove('skyhshoso-cpanel-card-loading');
                     iconContainer.innerHTML = origHtml;
-                    console.error('Connection error or failure:', err);
                     alert('Connection error.');
                 });
             });
@@ -817,9 +827,7 @@
                 .then(function(d) {
                     btn.disabled = false;
                     btn.textContent = origText;
-                    console.log('=== SKYHS WORDPRESS SSO RESPONSE ===', d);
                     if (d.success && d.data && d.data.url) {
-                        console.log('Opening Softaculous WP URL:', d.data.url);
                         window.open(d.data.url, '_blank');
                     } else {
                         alert('Could not auto-login. Try logging in to cPanel directly.');
@@ -828,7 +836,6 @@
                 .catch(function(err) {
                     btn.disabled = false;
                     btn.textContent = origText;
-                    console.error('SSO connection error:', err);
                     alert('Connection error.');
                 });
             });
@@ -849,9 +856,6 @@
         return div.innerHTML;
     }
 
-    /**
-     * 15. WordPress Site Provisioning
-     */
     function initWpSiteProvision() {
         var provisionBtn = document.getElementById('skyhshoso-wp-provision-btn');
         if (!provisionBtn) return;
@@ -903,7 +907,6 @@
             var adminEmail = document.getElementById('skyhshoso-wp-admin-email-input');
             var adminPass = document.getElementById('skyhshoso-wp-admin-pass-input');
 
-            // Hide form, show loading
             if (formView) formView.style.display = 'none';
             if (loadingView) loadingView.style.display = 'flex';
 
@@ -1058,7 +1061,6 @@
         initCpanelDashboard();
         initWpSiteProvision();
         initWpPasswordToggle();
-        // Initialize Hosting Pagination (server-side AJAX)
         setupPagination({
             paginationContainerId: 'skyhshoso-hosting-pagination',
             tbodyId: 'skyhshoso-hosting-tbody',
@@ -1068,7 +1070,6 @@
             ajaxAction: 'skyhshoso_get_hosting_page'
         });
 
-        // Initialize Domain Pagination (server-side AJAX)
         setupPagination({
             paginationContainerId: 'skyhshoso-domain-pagination',
             tbodyId: 'skyhshoso-domain-tbody',
@@ -1078,7 +1079,6 @@
             ajaxAction: 'skyhshoso_get_domain_page'
         });
 
-        // Initialize WP Site Pagination (server-side AJAX)
         if (document.getElementById('skyhshoso-wp-site-pagination')) {
             setupPagination({
                 paginationContainerId: 'skyhshoso-wp-site-pagination',
@@ -1091,7 +1091,6 @@
         initAddDomainForm();
     }
 
-    // Execute
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {

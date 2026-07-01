@@ -14,8 +14,11 @@ add_action('wp_ajax_skyhshoso_scan_wp_sites', 'skyhshoso_scan_wp_sites');
 add_action('wp_ajax_skyhshoso_assign_custom_domain', 'skyhshoso_assign_custom_domain');
 
 function skyhshoso_generate_cpanel_login_url() {
-    // Verify nonce for security
-    if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'skyhshoso_generate_cpanel_login_url_nonce' ) ) {
+    // Check multiple valid nonces (client-specific, client-dashboard, and admin-dashboard)
+    $nonce = isset( $_POST['nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['nonce'] ) ) : '';
+    if ( ! wp_verify_nonce( $nonce, 'skyhshoso_generate_cpanel_login_url_nonce' ) && 
+         ! wp_verify_nonce( $nonce, 'skyhshoso_dashboard_nonce' ) &&
+         ! wp_verify_nonce( $nonce, 'skyhshoso_get_cpanel_accounts' ) ) {
         wp_send_json_error( array( 'message' => esc_html__( 'Security check failed. Please refresh the page and try again.', 'skyhs-hosting-solution' ) ) );
         wp_die();
     }
@@ -73,38 +76,27 @@ function skyhshoso_generate_cpanel_login_url() {
         wp_die();
     }
 
-    // API call to create user session
-    $query = http_build_query([
+    // Initialize our API class to ensure URL cleaning and proper SSL handling
+    if (!class_exists('SkyHSHOSO_WHM_API')) {
+        require_once dirname(__FILE__) . '/class-whm-integration.php';
+    }
+    $whm_api = new SkyHSHOSO_WHM_API($whm_username, $whm_token, $whm_host);
+
+    $params = [
         'api.version' => 1,
         'user' => $username,
         'service' => 'cpaneld'
-    ]);
-    $url = "https://{$whm_host}:2087/json-api/create_user_session?{$query}";
+    ];
 
-    $args = array(
-        'headers' => array(
-            'Authorization' => "WHM {$whm_username}:{$whm_token}",
-        ),
-        'sslverify' => true,
-        'timeout'   => 30,
-    );
+    $result = $whm_api->call('create_user_session', $params);
 
-    $response = wp_remote_get( $url, $args );
-
-    if ( is_wp_error( $response ) ) {
-        wp_send_json_error( $response->get_error_message() );
-        wp_die();
-    }
-
-    $response_body = wp_remote_retrieve_body( $response );
-    $data = json_decode($response_body, true);
-
-    if (isset($data['data']['url'])) {
-        wp_send_json_success(['login_url' => $data['data']['url']]);
+    if ($result && isset($result['data']['url'])) {
+        wp_send_json_success(['login_url' => $result['data']['url']]);
     } else {
-        $error_message = "Failed to generate login URL.";
-        wp_send_json_error($error_message);
+        $error_message = isset($result['metadata']['reason']) ? $result['metadata']['reason'] : "Failed to generate login URL.";
+        wp_send_json_error(['message' => $error_message]);
     }
+    wp_die();
 }
 
 function skyhshoso_get_cpanel_stats() {
@@ -165,6 +157,9 @@ function skyhshoso_get_cpanel_stats() {
         wp_die();
     }
 
+    if (!class_exists('SkyHSHOSO_WHM_API')) {
+        require_once dirname(__FILE__) . '/class-whm-integration.php';
+    }
     $whm_api = new SkyHSHOSO_WHM_API( $whm_api_user, $whm_api_token, $whm_api_host );
 
     if ( false !== $cached_usage ) {
@@ -234,6 +229,10 @@ function skyhshoso_refresh_cpanel_stats() {
         wp_die();
     }
 
+    if (!class_exists('SkyHSHOSO_WHM_API')) {
+        require_once dirname(__FILE__) . '/class-whm-integration.php';
+    }
+    
     SkyHSHOSO_WHM_API::clear_stats_cache( $hosting_id );
 
     $whm_api = new SkyHSHOSO_WHM_API( $whm_api_user, $whm_api_token, $whm_api_host );
@@ -298,40 +297,26 @@ function skyhshoso_get_cpanel_section_url() {
     $whm_token  = get_post_meta( $server_id, '_skyhshoso_whm_token', true );
     $whm_host   = get_post_meta( $server_id, '_skyhshoso_whm_host', true );
 
-    $clean_host = preg_replace('#^https?://#i', '', trim($whm_host));
-    $clean_host = rtrim($clean_host, '/');
+    if (!class_exists('SkyHSHOSO_WHM_API')) {
+        require_once dirname(__FILE__) . '/class-whm-integration.php';
+    }
+    $whm_api = new SkyHSHOSO_WHM_API($whm_user, $whm_token, $whm_host);
 
-    $query = http_build_query([
+    $params = [
         'api.version' => 1,
         'user' => $username,
         'service' => 'cpaneld'
-    ]);
-    $url = "https://{$clean_host}:2087/json-api/create_user_session?{$query}";
+    ];
 
-    $args = array(
-        'headers' => array(
-            'Authorization' => "WHM {$whm_user}:{$whm_token}",
-        ),
-        'sslverify' => true,
-        'timeout'   => 30,
-    );
+    $result = $whm_api->call('create_user_session', $params);
 
-    $response = wp_remote_get( $url, $args );
-
-    if ( is_wp_error( $response ) ) {
-        wp_send_json_error( array( 'message' => $response->get_error_message() ) );
-        wp_die();
-    }
-
-    $data = json_decode( wp_remote_retrieve_body( $response ), true );
-
-    if ( isset( $data['data']['url'] ) ) {
-        $base_url = $data['data']['url'];
+    if ($result && isset($result['data']['url'])) {
+        $base_url = $result['data']['url'];
         $url = add_query_arg( 'goto_uri', $path, $base_url );
-
         wp_send_json_success( array( 'url' => $url ) );
     } else {
-        wp_send_json_error( array( 'message' => 'Failed to generate session.' ) );
+        $error_message = isset($result['metadata']['reason']) ? $result['metadata']['reason'] : 'Failed to generate session.';
+        wp_send_json_error( array( 'message' => $error_message ) );
     }
     wp_die();
 }
@@ -352,6 +337,9 @@ function skyhshoso_toggle_ssh() {
     $whm_api_token = get_post_meta($server_id, '_skyhshoso_whm_token', true);
     $whm_api_host  = get_post_meta($server_id, '_skyhshoso_whm_host', true);
 
+    if (!class_exists('SkyHSHOSO_WHM_API')) {
+        require_once dirname(__FILE__) . '/class-whm-integration.php';
+    }
     $whm_api = new SkyHSHOSO_WHM_API($whm_api_user, $whm_api_token, $whm_api_host);
     
     // WHM API Call to toggle SSH
@@ -380,6 +368,9 @@ function skyhshoso_reset_password() {
     $whm_api_token = get_post_meta($server_id, '_skyhshoso_whm_token', true);
     $whm_api_host  = get_post_meta($server_id, '_skyhshoso_whm_host', true);
 
+    if (!class_exists('SkyHSHOSO_WHM_API')) {
+        require_once dirname(__FILE__) . '/class-whm-integration.php';
+    }
     $whm_api = new SkyHSHOSO_WHM_API($whm_api_user, $whm_api_token, $whm_api_host);
     
     // WHM API 'passwd'
@@ -476,6 +467,9 @@ function skyhshoso_assign_custom_domain() {
     $whm_api_token = get_post_meta($server_id, '_skyhshoso_whm_token', true);
     $whm_api_host  = get_post_meta($server_id, '_skyhshoso_whm_host', true);
     
+    if (!class_exists('SkyHSHOSO_WHM_API')) {
+        require_once dirname(__FILE__) . '/class-whm-integration.php';
+    }
     $whm_api = new SkyHSHOSO_WHM_API($whm_api_user, $whm_api_token, $whm_api_host);
 
     // --- PHASE 1: SERVER INFRASTRUCTURE ---
