@@ -107,7 +107,6 @@ class SkyHSHOSO_Hosting_Manager {
             <div id="skyhshoso-hm-notice" class="notice" style="display:none;"></div>
 
             <div id="skyhshoso-hm-app">
-                <!-- Guided edit/create panel -->
                 <div class="skyhshoso-hm-form-panel" id="skyhshoso-hm-form-panel" style="display:none;">
                     <div class="skyhshoso-hm-form-header">
                         <h2 id="skyhshoso-hm-form-title"><?php esc_html_e( 'Create Hosting Account', 'skyhs-hosting-solution' ); ?></h2>
@@ -194,7 +193,7 @@ class SkyHSHOSO_Hosting_Manager {
                                 <div class="skyhshoso-hm-row skyhshoso-hm-row-cols-1">
                                     <div class="skyhshoso-hm-field">
                                         <label for="hm_domain"><?php esc_html_e( 'Domain Name', 'skyhs-hosting-solution' ); ?></label>
-                                        <input type="text" id="hm_domain" name="domain" class="hm-input" placeholder="<?php esc_attr_e( 'e.g., mysite.com', 'skyhs-hosting-solution' ); ?>" />
+                                        <input type="text" id="hm_domain" name="domain" class="hm-input" placeholder="<?php esc_attr_e( 'e.g., mysite.com (Leave blank for auto-generated subdomain)', 'skyhs-hosting-solution' ); ?>" />
                                     </div>
                                 </div>
                             </div>
@@ -222,7 +221,6 @@ class SkyHSHOSO_Hosting_Manager {
                     </form>
                 </div>
 
-                <!-- Account listing panel -->
                 <div class="skyhshoso-hm-list-panel">
                     <div class="skyhshoso-hm-list-header">
                         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
@@ -246,8 +244,7 @@ class SkyHSHOSO_Hosting_Manager {
                     </div>
 
                     <div id="skyhshoso-hm-container">
-                        <!-- Loaded dynamically via AJAX -->
-                    </div>
+                        </div>
 
                     <div class="skyhshoso-hm-pagination" style="display:flex;justify-content:space-between;align-items:center;margin-top:15px;padding-top:15px;border-top:1px solid #eee;">
                         <button type="button" id="hm-prev-page" class="button" disabled>&laquo; <?php esc_html_e( 'Previous', 'skyhs-hosting-solution' ); ?></button>
@@ -277,6 +274,10 @@ class SkyHSHOSO_Hosting_Manager {
         $product_id = isset( $_POST['product_id'] ) ? sanitize_text_field( wp_unslash( $_POST['product_id'] ) ) : '';
         $owner_id   = isset( $_POST['owner_id'] ) ? intval( $_POST['owner_id'] ) : 0;
         $domain     = isset( $_POST['domain'] ) ? sanitize_text_field( wp_unslash( $_POST['domain'] ) ) : '';
+        $account_source = isset( $_POST['account_source'] ) ? sanitize_text_field( wp_unslash( $_POST['account_source'] ) ) : 'new';
+        $existing_cpanel_user = isset( $_POST['existing_cpanel_user'] ) ? sanitize_text_field( wp_unslash( $_POST['existing_cpanel_user'] ) ) : '';
+        $sub_action = isset( $_POST['sub_action'] ) ? sanitize_text_field( wp_unslash( $_POST['sub_action'] ) ) : 'create';
+        $existing_sub_id = isset( $_POST['existing_sub_id'] ) ? intval( $_POST['existing_sub_id'] ) : 0;
 
 		if ( empty( $product_id ) || ! $owner_id ) {
 			SkyHSHOSO_Logger::error( 'Hosting save failed: product and owner fields are required', array( 'source' => 'hosting_manager' ) );
@@ -313,6 +314,13 @@ class SkyHSHOSO_Hosting_Manager {
             $result_id = wp_update_post( $post_data );
         } else {
             $result_id = wp_insert_post( $post_data );
+            if ( ! is_wp_error( $result_id ) ) {
+                // Keep the slug the same as the ID initially
+                wp_update_post( array(
+                    'ID' => $result_id,
+                    'post_name' => $result_id
+                ) );
+            }
         }
 
 		if ( is_wp_error( $result_id ) ) {
@@ -320,66 +328,125 @@ class SkyHSHOSO_Hosting_Manager {
 			wp_send_json_error( array( 'message' => $result_id->get_error_message() ) );
 		}
 
-        // Save metadata
-        update_post_meta( $result_id, '_skyhshoso_hosting_product_id', $prod_id );
+        $hosting_id = $result_id; // Use the created/updated ID
+
+        // Save metadata from product
+        update_post_meta( $hosting_id, '_skyhshoso_hosting_product_id', $prod_id );
         if ( $var_id ) {
-            update_post_meta( $result_id, '_skyhshoso_variation_id', $var_id );
+            update_post_meta( $hosting_id, '_skyhshoso_variation_id', $var_id );
         } else {
-            delete_post_meta( $result_id, '_skyhshoso_variation_id' );
+            delete_post_meta( $hosting_id, '_skyhshoso_variation_id' );
         }
 
-        // Copy server ID & hosting plan from product
         $server_id = get_post_meta( $prod_id, '_skyhshoso_server_id', true );
         $hosting_plan = get_post_meta( $var_id ?: $prod_id, '_skyhshoso_hosting_plan', true );
 
         if ( ! empty( $server_id ) ) {
-            update_post_meta( $result_id, 'skyhshoso_server_id', $server_id );
+            update_post_meta( $hosting_id, 'skyhshoso_server_id', $server_id );
         }
         if ( ! empty( $hosting_plan ) ) {
-            update_post_meta( $result_id, 'skyhshoso_hosting_plan', $hosting_plan );
+            update_post_meta( $hosting_id, 'skyhshoso_hosting_plan', $hosting_plan );
         }
 
-        // Handle account source
-        $account_source = isset( $_POST['account_source'] ) ? sanitize_text_field( wp_unslash( $_POST['account_source'] ) ) : 'new';
-        $existing_cpanel_user = isset( $_POST['existing_cpanel_user'] ) ? sanitize_text_field( wp_unslash( $_POST['existing_cpanel_user'] ) ) : '';
-
-        // Auto-assign domain from cached cPanel account when connecting existing
-        if ( empty( $domain ) && ! empty( $existing_cpanel_user ) && ! empty( $server_id ) ) {
-            $cached_domain = $this->get_cached_cpanel_domain( $server_id, $existing_cpanel_user );
-            if ( $cached_domain ) {
-                $domain = $cached_domain;
+        // --- NEW SYSTEM DOMAIN LOGIC ---
+        // If creating a new cPanel account and domain is blank, generate a system domain
+        if ( 'new' === $account_source && empty( $domain ) ) {
+            $unique_id = strtolower( wp_generate_password( 6, false, false ) );
+            $options = get_option( 'skyhshoso_settings_group', array() );
+            $base_domain = isset( $options['system_subdomain'] ) && ! empty( $options['system_subdomain'] ) ? $options['system_subdomain'] : 'cielocloud.xyz';
+            
+            $domain = $unique_id . '.' . ltrim( $base_domain, '.' );
+            $username = 'cielo' . $unique_id;
+            
+            update_post_meta( $hosting_id, 'skyhshoso_hosting_domain', $domain );
+            update_post_meta( $hosting_id, '_skyhshoso_system_domain', $domain );
+            update_post_meta( $hosting_id, 'skyhshoso_hosting_username', $username );
+            
+            // Generate a secure temp password
+            $temp_password = wp_generate_password( 16, true, true );
+            update_post_meta( $hosting_id, '_skyhshoso_hosting_temp_password', $temp_password );
+        } elseif ( 'new' === $account_source && ! empty( $domain ) ) {
+            // User explicitly provided a domain
+            update_post_meta( $hosting_id, 'skyhshoso_hosting_domain', $domain );
+            
+            $username = get_post_meta( $hosting_id, 'skyhshoso_hosting_username', true );
+            if ( empty( $username ) ) {
+                $username = substr( preg_replace( '/[^a-z0-9]/', '', strtolower( $domain ) ), 0, 8 ) . substr( md5( time() ), 0, 8 );
+                update_post_meta( $hosting_id, 'skyhshoso_hosting_username', $username );
             }
-        }
-
-        if ( 'new' === $account_source && ! empty( $domain ) ) {
-            update_post_meta( $result_id, 'skyhshoso_hosting_domain', $domain );
-        } else {
-            delete_post_meta( $result_id, 'skyhshoso_hosting_domain' );
-        }
-
-        if ( ! empty( $existing_cpanel_user ) ) {
-            update_post_meta( $result_id, 'skyhshoso_hosting_username', $existing_cpanel_user );
-            update_post_meta( $result_id, '_skyhshoso_hosting_account_source', 'existing' );
-            delete_post_meta( $result_id, '_skyhshoso_hosting_temp_password' );
-        } else {
-            $is_new = ! get_post_meta( $result_id, 'skyhshoso_hosting_username', true );
-            if ( $is_new ) {
-                update_post_meta( $result_id, '_skyhshoso_hosting_account_source', $account_source );
-                if ( 'none' === $account_source ) {
-                    delete_post_meta( $result_id, 'skyhshoso_hosting_username' );
-                    delete_post_meta( $result_id, '_skyhshoso_hosting_temp_password' );
+            
+            $temp_password = get_post_meta( $hosting_id, '_skyhshoso_hosting_temp_password', true );
+            if ( empty( $temp_password ) ) {
+                $temp_password = wp_generate_password( 16, true, true );
+                update_post_meta( $hosting_id, '_skyhshoso_hosting_temp_password', $temp_password );
+            }
+        } elseif ( 'existing' === $account_source ) {
+            // Auto-assign domain from cached cPanel account if connecting existing and domain is blank
+            if ( empty( $domain ) && ! empty( $existing_cpanel_user ) && ! empty( $server_id ) ) {
+                $cached_domain = $this->get_cached_cpanel_domain( $server_id, $existing_cpanel_user );
+                if ( $cached_domain ) {
+                    $domain = $cached_domain;
                 }
             }
+            
+            if ( ! empty( $domain ) ) {
+                update_post_meta( $hosting_id, 'skyhshoso_hosting_domain', $domain );
+            }
+            
+            if ( ! empty( $existing_cpanel_user ) ) {
+                update_post_meta( $hosting_id, 'skyhshoso_hosting_username', $existing_cpanel_user );
+                update_post_meta( $hosting_id, '_skyhshoso_hosting_account_source', 'existing' );
+                delete_post_meta( $hosting_id, '_skyhshoso_hosting_temp_password' );
+            }
+        } elseif ( 'none' === $account_source ) {
+            delete_post_meta( $hosting_id, 'skyhshoso_hosting_domain' );
+            delete_post_meta( $hosting_id, 'skyhshoso_hosting_username' );
+            delete_post_meta( $hosting_id, '_skyhshoso_hosting_temp_password' );
+            update_post_meta( $hosting_id, '_skyhshoso_hosting_account_source', 'none' );
+        }
+        
+        $provision_msg = '';
+
+        // --- PROVISIONING: TRIGGER WHM IF NEW ---
+        if ( 'new' === $account_source && ! empty( $server_id ) && ! empty( $hosting_plan ) ) {
+            $whm_username = get_post_meta( $server_id, '_skyhshoso_whm_user_id', true );
+            $whm_token = get_post_meta( $server_id, '_skyhshoso_whm_token', true );
+            $whm_host = get_post_meta( $server_id, '_skyhshoso_whm_host', true );
+
+            if ( $whm_username && $whm_token && $whm_host ) {
+                if ( ! class_exists( 'SkyHSHOSO_WHM_API' ) ) {
+                    require_once dirname( __FILE__ ) . '/class-whm-integration.php';
+                }
+                $whm_api = new SkyHSHOSO_WHM_API( $whm_username, $whm_token, $whm_host );
+                
+                $whm_result = $whm_api->create_whm_account( $hosting_id, $domain );
+                
+                if ( is_wp_error( $whm_result ) ) {
+                    update_post_meta( $hosting_id, '_skyhshoso_whm_provision_error', 'WHM Rejection: ' . $whm_result->get_error_message() );
+                    update_post_meta( $hosting_id, '_skyhshoso_whm_provision_status', 'failed' );
+                    $provision_msg = ' However, WHM account creation failed: ' . $whm_result->get_error_message();
+                } else {
+                    update_post_meta( $hosting_id, '_skyhshoso_whm_provision_status', 'success' );
+                    delete_post_meta( $hosting_id, '_skyhshoso_whm_provision_error' );
+                    $provision_msg = ' WHM account successfully provisioned.';
+
+                    if ( class_exists( 'SkyHSHOSO_Emails' ) ) {
+                        $created_username = get_post_meta( $hosting_id, 'skyhshoso_hosting_username', true );
+                        SkyHSHOSO_Emails::send_provisioning( $hosting_id, $created_username );
+                    }
+                }
+            } else {
+                update_post_meta( $hosting_id, '_skyhshoso_whm_provision_error', 'Missing WHM credentials on Server ID ' . $server_id );
+                $provision_msg = ' WHM account creation skipped: Missing server credentials.';
+            }
         }
 
-        // Trigger manual subscription creation or linking synchronously
+        // Handle Subscription Action
         $sub_creation_msg = '';
-        $sub_action = isset( $_POST['sub_action'] ) ? sanitize_text_field( wp_unslash( $_POST['sub_action'] ) ) : 'create';
-        $existing_sub_id = isset( $_POST['existing_sub_id'] ) ? intval( $_POST['existing_sub_id'] ) : 0;
 
         if ( 'keep' === $sub_action ) {
             // Keep existing subscription — do nothing
-            $existing_sub = get_post_meta( $result_id, 'skyhshoso_subscription_id', true );
+            $existing_sub = get_post_meta( $hosting_id, 'skyhshoso_subscription_id', true );
             if ( ! empty( $existing_sub ) ) {
                 $sub_creation_msg = sprintf( __( ' Keeping existing subscription #%d.', 'skyhs-hosting-solution' ), $existing_sub );
             }
@@ -390,29 +457,25 @@ class SkyHSHOSO_Hosting_Manager {
 					SkyHSHOSO_Logger::error( 'Hosting subscription link failed: subscription #' . $existing_sub_id . ' does not exist', array( 'source' => 'hosting_manager' ) );
 					wp_send_json_error( array( 'message' => __( 'The selected subscription ID does not exist.', 'skyhs-hosting-solution' ) ) );
 				}
-                update_post_meta( $result_id, 'skyhshoso_subscription_id', $existing_sub_id );
-                delete_post_meta( $result_id, '_skyhshoso_subscription_creation_pending' );
-                delete_post_meta( $result_id, '_skyhshoso_subscription_creation_error' );
+                update_post_meta( $hosting_id, 'skyhshoso_subscription_id', $existing_sub_id );
+                delete_post_meta( $hosting_id, '_skyhshoso_subscription_creation_pending' );
+                delete_post_meta( $hosting_id, '_skyhshoso_subscription_creation_error' );
                 $sub_creation_msg = sprintf( __( ' Linked to existing subscription #%d.', 'skyhs-hosting-solution' ), $existing_sub_id );
             } else {
                 wp_send_json_error( array( 'message' => __( 'Please search and select an existing subscription to link.', 'skyhs-hosting-solution' ) ) );
             }
         } else {
-            // Create on the go — always attempt creation
-            // Clear any existing subscription ID so creation logic proceeds
-            delete_post_meta( $result_id, 'skyhshoso_subscription_id' );
-            delete_post_meta( $result_id, '_skyhshoso_subscription_creation_error' );
+            // Create on the go
+            delete_post_meta( $hosting_id, 'skyhshoso_subscription_id' );
+            delete_post_meta( $hosting_id, '_skyhshoso_subscription_creation_error' );
+            update_post_meta( $hosting_id, '_skyhshoso_subscription_creation_pending', 'yes' );
 
-            // Mark as pending
-            update_post_meta( $result_id, '_skyhshoso_subscription_creation_pending', 'yes' );
-
-            // Attempt synchronous creation
-            $created = $this->process_subscription_creation( $result_id );
+            $created = $this->process_subscription_creation( $hosting_id );
             if ( $created ) {
-                $new_sub_id = get_post_meta( $result_id, 'skyhshoso_subscription_id', true );
+                $new_sub_id = get_post_meta( $hosting_id, 'skyhshoso_subscription_id', true );
                 $sub_creation_msg = sprintf( __( ' Billing subscription #%d successfully provisioned.', 'skyhs-hosting-solution' ), $new_sub_id );
             } else {
-                $error = get_post_meta( $result_id, '_skyhshoso_subscription_creation_error', true );
+                $error = get_post_meta( $hosting_id, '_skyhshoso_subscription_creation_error', true );
                 $sub_creation_msg = __( ' Billing subscription creation failed.', 'skyhs-hosting-solution' );
                 if ( $error ) {
                     $sub_creation_msg .= ' ' . $error;
@@ -421,8 +484,8 @@ class SkyHSHOSO_Hosting_Manager {
         }
 
         wp_send_json_success( array(
-            'message'    => __( 'Hosting details successfully saved.', 'skyhs-hosting-solution' ) . $sub_creation_msg,
-            'hosting_id' => $result_id,
+            'message'    => __( 'Hosting details successfully saved.', 'skyhs-hosting-solution' ) . $provision_msg . $sub_creation_msg,
+            'hosting_id' => $hosting_id,
         ) );
     }
 
@@ -705,13 +768,18 @@ class SkyHSHOSO_Hosting_Manager {
             }
 
             if ( $product->is_type( 'simple' ) || $product->is_type( 'subscription' ) ) {
-                $price = wp_strip_all_tags( wc_price( $product->get_price() ) );
+                // FIXED: Use get_price_html() directly instead of get_price() to ensure proper formatting
+                $price_html = wp_strip_all_tags( $product->get_price_html() );
+                if ( empty($price_html) ) {
+                    $price_html = 'Free';
+                }
+                
                 $server_id = get_post_meta( $product->get_id(), '_skyhshoso_server_id', true );
                 $plan = get_post_meta( $product->get_id(), '_skyhshoso_hosting_plan', true );
 
                 $products[] = array(
                     'id'           => strval( $product->get_id() ),
-                    'label'        => $product->get_name() . ' — ' . $price,
+                    'label'        => $product->get_name() . ' — ' . $price_html,
                     'server_id'    => $server_id ?: '',
                     'plan'         => $plan ?: '',
                 );
@@ -736,11 +804,16 @@ class SkyHSHOSO_Hosting_Manager {
                         break; // Use first attribute as plan name
                     }
 
-                    $price = wp_strip_all_tags( wc_price( $variation->get_price() ) );
+                    // FIXED: Use get_price_html() natively
+                    $price_html = wp_strip_all_tags( $variation->get_price_html() );
+                    if ( empty($price_html) ) {
+                        $price_html = 'Free';
+                    }
+                    
                     $server_id = get_post_meta( $product->get_id(), '_skyhshoso_server_id', true );
                     $hosting_plan = get_post_meta( $variation->get_id(), '_skyhshoso_hosting_plan', true );
 
-                    $label = $product->get_name() . ' » ' . $plan_name . ' — ' . $price;
+                    $label = $product->get_name() . ' » ' . $plan_name . ' — ' . $price_html;
 
                     $products[] = array(
                         'id'           => $product->get_id() . '|' . $variation->get_id(),
@@ -854,7 +927,9 @@ class SkyHSHOSO_Hosting_Manager {
 
         $product_title = '—';
         if ( $product_id ) {
-            $prod = wc_get_product( $product_id );
+            // Fetch the specific product (variation or simple) so the UI displays the exact plan name
+            $fetch_id = $variation_id ? $variation_id : $product_id;
+            $prod = wc_get_product( $fetch_id );
             $product_title = $prod ? $prod->get_name() : $product_id;
         }
 

@@ -8,10 +8,7 @@ class SkyHSHOSO_WHM_API {
         $this->username = $username;
         $this->token = $token;
         $this->host = $host;
-
-     
     }
-    
 
     public function call($endpoint, $params = []) {
         $query = http_build_query($params);
@@ -59,50 +56,59 @@ class SkyHSHOSO_WHM_API {
         if (isset($result['metadata']['reason']) && $result['metadata']['reason'] == 'OK') {
             return true;
         } else {
-            $error_message = isset($result['metadata']['reason']) ? $result['metadata']['reason'] : 'Unknown error';
             return false;
         }
-}
-    public function create_whm_account($hosting_id, $domain) {
-    $server_id = get_post_meta($hosting_id, 'skyhshoso_server_id', true);
-    $plan = get_post_meta($hosting_id, 'skyhshoso_hosting_plan', true);
-    $current_user = wp_get_current_user();
-    $user_email = $current_user->user_email;
-
-    $username = substr(preg_replace('/[^a-z0-9]/', '', strtolower($domain)), 0, 8) . substr(md5(time()), 0, 8);
-    $password = wp_generate_password(16, true, true);
-
-    // Save password temporarily so provisioning email can include it.
-    update_post_meta($hosting_id, '_skyhshoso_hosting_temp_password', $password);
-
-    $params = array(
-        'api.version' => 1,
-        'domain' => $domain,
-        'username' => $username,
-        'password' => $password,
-        'plan' => $plan,
-        'contactemail' => $user_email
-    );
-
-    $result = $this->call('createacct', $params);
-
-    if (isset($result['metadata']['reason']) && $result['metadata']['reason'] == 'OK') {
-        update_post_meta($hosting_id, 'skyhshoso_hosting_username', $username);
-        return true;
-    } else {
-		delete_post_meta($hosting_id, '_skyhshoso_hosting_temp_password');
-		$error_message = isset($result['metadata']['reason']) ? $result['metadata']['reason'] : 'Unknown error';
-		SkyHSHOSO_Logger::error( 'WHM account creation failed for hosting #' . $hosting_id . ': ' . $error_message, array( 'source' => 'whm_integration' ) );
-		return new WP_Error('whm_creation_failed', $error_message);
     }
-}
 
-    /**
-     * Get account summary with resource usage from WHM.
-     *
-     * @param string $username cPanel username.
-     * @return array|false Disk/bandwidth stats or false on failure.
-     */
+    public function create_whm_account($hosting_id, $domain) {
+        $server_id = get_post_meta($hosting_id, 'skyhshoso_server_id', true);
+        $plan = get_post_meta($hosting_id, 'skyhshoso_hosting_plan', true);
+        
+        // FIX: Fetch email directly from the post author instead of session
+        $author_id = get_post_field('post_author', $hosting_id);
+        $author = get_userdata($author_id);
+        $user_email = $author ? $author->user_email : '';
+
+        // Use pre-generated username if it exists, otherwise generate fallback
+        $username = get_post_meta($hosting_id, 'skyhshoso_hosting_username', true);
+        if (empty($username)) {
+            $username = substr(preg_replace('/[^a-z0-9]/', '', strtolower($domain)), 0, 8) . substr(md5(time()), 0, 8);
+            update_post_meta($hosting_id, 'skyhshoso_hosting_username', $username);
+        }
+
+        // Use pre-generated password if it exists, otherwise generate fallback
+        $password = get_post_meta($hosting_id, '_skyhshoso_hosting_temp_password', true);
+        if (empty($password)) {
+            $password = wp_generate_password(16, true, true);
+            update_post_meta($hosting_id, '_skyhshoso_hosting_temp_password', $password);
+        }
+
+        $params = array(
+            'api.version' => 1,
+            'domain'      => $domain,
+            'username'    => $username,
+            'password'    => $password,
+            'plan'        => $plan
+        );
+
+        if (!empty($user_email)) {
+            $params['contactemail'] = $user_email;
+        }
+
+        $result = $this->call('createacct', $params);
+
+        if (isset($result['metadata']['reason']) && $result['metadata']['reason'] == 'OK') {
+            return true;
+        } else {
+            // Provide explicit error fallback
+            $error_message = isset($result['metadata']['reason']) ? $result['metadata']['reason'] : (isset($result['metadata']['result']) ? wp_json_encode($result['metadata']) : 'Unknown WHM API error');
+            if (class_exists('SkyHSHOSO_Logger')) {
+                SkyHSHOSO_Logger::error( 'WHM account creation failed for hosting #' . $hosting_id . ' (Domain: ' . $domain . '): ' . $error_message, array( 'source' => 'whm_integration' ) );
+            }
+            return new WP_Error('whm_creation_failed', $error_message);
+        }
+    }
+
     public function get_account_summary($username) {
         $result = $this->call('accountsummary', [
             'api.version' => 1,
@@ -114,7 +120,6 @@ class SkyHSHOSO_WHM_API {
         }
 
         $acct = $result['data']['acct'][0];
-
         $mb_to_bytes = 1048576;
 
         return [
@@ -136,16 +141,6 @@ class SkyHSHOSO_WHM_API {
         return $full['result']['data'] ?? $full['result'] ?? false;
     }
 
-    /**
-     * Call cPanel UAPI v3 via WHM API proxy and return the full response including errors.
-     * Uses the correct endpoint: /json-api/cpanel (not /json-api/uapi).
-     *
-     * @param string $cpanel_user
-     * @param string $module
-     * @param string $function
-     * @param array  $params
-     * @return array|false Full response array, or false on connection failure.
-     */
     public function cpanel_uapi_call_v3_raw($cpanel_user, $module, $function, $params = []) {
         $params['cpanel_jsonapi_module']      = $module;
         $params['cpanel_jsonapi_func']        = $function;
@@ -181,16 +176,6 @@ class SkyHSHOSO_WHM_API {
         return json_decode( $body, true );
     }
 
-    /**
-     * Call cPanel API v2 via WHM proxy (useful when UAPI v3 module is unavailable).
-     * Returns the full response array.
-     *
-     * @param string $cpanel_user
-     * @param string $module
-     * @param string $function
-     * @param array  $params
-     * @return array|false
-     */
     public function cpanel_api_v2_raw($cpanel_user, $module, $function, $params = []) {
         $params['cpanel_jsonapi_module']      = $module;
         $params['cpanel_jsonapi_func']        = $function;
@@ -237,10 +222,8 @@ class SkyHSHOSO_WHM_API {
 
         $content = $file_data['content'];
         
-        // Extract serialized string
         if ( preg_match( '/unserialize\s*\(\s*[\'"](.*?)[\'"]\s*\)/s', $content, $matches ) ) {
             $serialized_str = $matches[1];
-            // Decode escaped single quotes and backslashes
             $serialized_str = str_replace( array( "\\'", "\\\\" ), array( "'", "\\" ), $serialized_str );
             $data = @unserialize( $serialized_str );
             if ( is_array( $data ) ) {
@@ -356,7 +339,6 @@ class SkyHSHOSO_WHM_API {
 
     public function check_wordpress($cpanel_user, $domain) {
         $wordpress_sites = [];
-
         $subdomains = $this->get_subdomains($cpanel_user);
 
         $dirs_to_check = [
@@ -383,9 +365,7 @@ class SkyHSHOSO_WHM_API {
                 'showhidden' => 1,
             ]);
 
-            if ( empty( $data ) ) {
-                continue;
-            }
+            if ( empty( $data ) ) continue;
 
             $subdirs = [];
             $has_wp = false;
@@ -484,18 +464,11 @@ class SkyHSHOSO_WHM_API {
         delete_transient( 'skyhshoso_usage_' . $hosting_id );
     }
 
-    /**
-     * Terminate (remove) a cPanel account.
-     *
-     * @param string $username cPanel username.
-     * @return bool
-     */
     public function terminate_account($username) {
         $result = $this->call('removeacct', [
             'api.version' => 1,
             'user'        => $username,
         ]);
-
         return isset($result['metadata']['reason']) && $result['metadata']['reason'] === 'OK';
     }
 
@@ -505,14 +478,8 @@ class SkyHSHOSO_WHM_API {
             'user' => $username,
             'reason' => $reason
         ];
-
         $result = $this->call('suspendacct', $params);
-
-        if (isset($result['metadata']['reason']) && $result['metadata']['reason'] == 'OK') {
-            return true;
-        } else {
-            return false;
-        }
+        return isset($result['metadata']['reason']) && $result['metadata']['reason'] == 'OK';
     }
 
     public function reactivate_account($username) {
@@ -520,22 +487,11 @@ class SkyHSHOSO_WHM_API {
             'api.version' => 1,
             'user' => $username
         ];
-
         $result = $this->call('unsuspendacct', $params);
-
-        if (isset($result['metadata']['reason']) && $result['metadata']['reason'] == 'OK') {
-            return true;
-        } else {
-            return false;
-        }
+        return isset($result['metadata']['reason']) && $result['metadata']['reason'] == 'OK';
     }
-
-
 }
 
-/**
- * WHM Integration helper — fetches/saves packages, displays them.
- */
 class SkyHSHOSO_WHM_Integration {
     private $whm_api;
 
@@ -547,7 +503,6 @@ class SkyHSHOSO_WHM_Integration {
         $params = [
             'api.version' => 1,
         ];
-
         $response = $this->whm_api->call('listpkgs', $params);
 
 		if ( $response === false ) {
@@ -578,13 +533,11 @@ class SkyHSHOSO_WHM_Integration {
 
         if (!empty($packages)) {
             $default_names = [];
-
             foreach ($packages as $package) {
                 if (isset($package['FEATURELIST']) && $package['FEATURELIST'] === 'default') {
                     $default_names[] = $package['name'];
                 }
             }
-
             if (!empty($default_names)) {
                 update_post_meta($server_id, '_skyhshoso_whm_default_package_names', $default_names);
                 delete_post_meta($server_id, '_skyhshoso_whm_last_error');
@@ -597,15 +550,11 @@ class SkyHSHOSO_WHM_Integration {
         return false;
     }
 
-    /**
-     * Fetch all cPanel accounts from the WHM server via listaccts.
-     */
     public function get_accounts() {
         $params = array(
             'api.version' => 1,
             'want'        => 'user,domain,plan,diskused,disklimit,startdate,suspended,email',
         );
-
         $response = $this->whm_api->call( 'listaccts', $params );
 
 		if ( $response === false ) {
@@ -619,11 +568,9 @@ class SkyHSHOSO_WHM_Integration {
 		}
 
 		$accts = isset( $response['data']['acct'] ) ? $response['data']['acct'] : array();
-
         if ( ! is_array( $accts ) ) {
             return array();
         }
-
         return $accts;
     }
 

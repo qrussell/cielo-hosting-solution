@@ -19,30 +19,21 @@ class SkyHSHOSO_Subscription_Handler {
         add_action( 'before_woocommerce_init', array( $this, 'declare_hpos_compatibility' ) );
 
         // SkyHS custom subscription hooks — fired by class-skyhshoso-subscription-checkout.php
-        // and class-skyhshoso-subscription-cron.php.
         add_action( 'skyhshoso_subscription_created', array( $this, 'handle_subscription_creation_or_resubscribe' ), 10, 3 );
         add_action( 'skyhshoso_subscription_status_updated', array( $this, 'update_post_status_on_subscription_change' ), 10, 3 );
         add_action( 'skyhshoso_subscription_renewed', array( $this, 'handle_subscription_renewal' ), 10, 2 );
 
-        // Plan switch is now a manual admin action — hook kept for forward compatibility.
+        // Plan switch is now a manual admin action
         add_action( 'skyhshoso_subscription_switch_completed', array( $this, 'handle_subscription_switch' ), 10, 2 );
     }
 
-    /**
-     * Declare compatibility with HPOS
-     */
     public function declare_hpos_compatibility() {
         if (class_exists('\Automattic\WooCommerce\Utilities\FeaturesUtil')) {
             \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility('custom_order_tables', __FILE__, true);
         }
     }
 
-    /**
-     * Handle new subscription created at checkout.
-     * $order may be a WC_Order or WC_Order_Item_Product depending on caller.
-     */
     public function handle_subscription_creation_or_resubscribe( $subscription, $order = null, $item_or_cart = null ) {
-
         $old_subscription_id = $subscription->get_meta( '_subscription_resubscribe' );
 
         if ( $old_subscription_id ) {
@@ -51,19 +42,13 @@ class SkyHSHOSO_Subscription_Handler {
                 $this->handle_subscription_resubscribe( $subscription, $old_subscription );
             }
         } else {
-            // $order may be a WC_Order (from our checkout handler) or null (from admin manual creation).
             if ( $order instanceof WC_Order ) {
                 $this->create_posts_for_subscription( $subscription, $order, $item_or_cart );
             }
-            // If $order is null (admin-side creation), the hosting post is already
-            // being created by the Hosting Manager — no need to duplicate it here.
         }
     }
     
     private function create_posts_for_subscription($subscription, $order, $item_or_cart) {
-        // Build the list of items to process.
-        // Our checkout handler passes a single WC_Order_Item_Product;
-        // may also get a cart object or null — fall back to order items.
         $items = array();
         if ( $item_or_cart instanceof WC_Order_Item_Product ) {
             $items = array( $item_or_cart );
@@ -79,7 +64,6 @@ class SkyHSHOSO_Subscription_Handler {
             $product_id = $product->get_id();
             $parent_id = $product->get_parent_id();
             
-            // Get product type from parent if it's a variation
             if ($parent_id) {
                 $parent_product = wc_get_product($parent_id);
                 $product_type = get_post_meta($parent_id, '_skyhshoso_product_type', true);
@@ -87,21 +71,18 @@ class SkyHSHOSO_Subscription_Handler {
                 $product_type = get_post_meta($product_id, '_skyhshoso_product_type', true);
             }
             
-            
             if ($product_type === 'skyhshoso_hosting') {
                 $this->create_hosting_post($subscription, $order, $product, $parent_id);
             } elseif ($product_type === 'skyhshoso_domain') {
                 $this->create_domain_post($subscription, $order, $product, $parent_id);
             } elseif ($product_type === 'skyhshoso_wp_site') {
                 $this->create_wp_site_post($subscription, $order, $product, $parent_id);
-            } else {
             }
         }
     }
 
     private function create_hosting_post($subscription, $order, $product, $parent_id = 0) {
         
-        // Check if a hosting post already exists for this subscription
         $existing_posts = get_posts(array(
             'post_type'      => 'skyhshoso_hosting',
             'meta_key'       => 'skyhshoso_subscription_id',
@@ -112,7 +93,7 @@ class SkyHSHOSO_Subscription_Handler {
         ));
 
         if (!empty($existing_posts)) {
-            return; // A hosting post already exists, don't duplicate.
+            return;
         }
 
         $post_title = $product->get_name();
@@ -122,7 +103,7 @@ class SkyHSHOSO_Subscription_Handler {
             'post_author'   => $post_author,
             'post_type'     => 'skyhshoso_hosting',
             'post_status'   => 'publish',
-            'post_name'     => '' // This will be set after post creation
+            'post_name'     => '' 
         );
 		$post_id = wp_insert_post($post_data);
 		
@@ -130,19 +111,16 @@ class SkyHSHOSO_Subscription_Handler {
 			SkyHSHOSO_Logger::error( 'Hosting post creation failed for subscription #' . $subscription->get_id() . ': ' . $post_id->get_error_message(), array( 'source' => 'subscription_handler' ) );
 		} else {
             
-            // Set the post_name (slug) to be the post ID
             $post_name = $post_id;
             wp_update_post(array(
                 'ID' => $post_id,
                 'post_name' => $post_name
             ));
             
-            // Get hosting plan and server ID from the correct product (parent or variation)
             $product_id = $parent_id ? $parent_id : $product->get_id();
             $hosting_plan = get_post_meta($product_id, '_skyhshoso_hosting_plan', true);
             $server_id = get_post_meta($product_id, '_skyhshoso_server_id', true);
             
-            // If it's a variation, check if it has its own hosting plan or server ID
             if ($parent_id) {
                 $variation_hosting_plan = get_post_meta($product->get_id(), '_skyhshoso_hosting_plan', true);
                 $variation_server_id = get_post_meta($product->get_id(), '_skyhshoso_server_id', true);
@@ -155,19 +133,68 @@ class SkyHSHOSO_Subscription_Handler {
                 }
             }
             
+            // Generate a unique 6-character identifier
+            $unique_id = strtolower(wp_generate_password(6, false, false));
             
-            // Add custom fields to the post
+            // Fetch configurable base domain from plugin settings (Default: cielocloud.xyz)
+            $options = get_option('skyhshoso_settings_group', array());
+            $base_domain = isset($options['system_subdomain']) && !empty($options['system_subdomain']) ? $options['system_subdomain'] : 'cielocloud.xyz';
+            
+            $system_domain = $unique_id . '.' . ltrim($base_domain, '.');
+            $username = 'cielo' . $unique_id;
+            $temp_password = wp_generate_password(16, true, true);
+
+            // FIX: Connect the WC Product directly to the Hosting Post so it shows up in the admin panel!
+            update_post_meta($post_id, '_skyhshoso_hosting_product_id', $product_id);
+            if ($parent_id) {
+                update_post_meta($post_id, '_skyhshoso_variation_id', $product->get_id());
+            }
+
             update_post_meta($post_id, 'skyhshoso_subscription_id', $subscription->get_id());
-            update_post_meta($post_id, 'skyhshoso_hosting_domain', '');
+            update_post_meta($post_id, 'skyhshoso_hosting_domain', $system_domain);
+            update_post_meta($post_id, '_skyhshoso_system_domain', $system_domain);
+            update_post_meta($post_id, 'skyhshoso_hosting_username', $username);
+            update_post_meta($post_id, '_skyhshoso_hosting_temp_password', $temp_password);
+            
             update_post_meta($post_id, 'skyhshoso_hosting_plan', $hosting_plan);
             update_post_meta($post_id, 'skyhshoso_server_id', $server_id);
-            
+
+            // === TRIGGER WHM ACCOUNT CREATION IMMEDIATELY ===
+            if ($server_id && $hosting_plan) {
+                $whm_username = get_post_meta($server_id, '_skyhshoso_whm_user_id', true);
+                $whm_token = get_post_meta($server_id, '_skyhshoso_whm_token', true);
+                $whm_host = get_post_meta($server_id, '_skyhshoso_whm_host', true);
+                
+                if ($whm_username && $whm_token && $whm_host) {
+                    if (!class_exists('SkyHSHOSO_WHM_API')) {
+                        require_once dirname(__FILE__) . '/class-whm-integration.php';
+                    }
+                    $whm_api = new SkyHSHOSO_WHM_API($whm_username, $whm_token, $whm_host);
+                    
+                    $whm_result = $whm_api->create_whm_account($post_id, $system_domain);
+                    
+                    if (is_wp_error($whm_result)) {
+                        update_post_meta($post_id, '_skyhshoso_whm_provision_error', 'WHM Rejection: ' . $whm_result->get_error_message());
+                        update_post_meta($post_id, '_skyhshoso_whm_provision_status', 'failed');
+                    } else {
+                        update_post_meta($post_id, '_skyhshoso_whm_provision_status', 'success');
+                        delete_post_meta($post_id, '_skyhshoso_whm_provision_error');
+
+                        if (class_exists('SkyHSHOSO_Emails')) {
+                            SkyHSHOSO_Emails::send_provisioning($post_id, $username);
+                        }
+                    }
+                } else {
+                    update_post_meta($post_id, '_skyhshoso_whm_provision_error', 'Missing WHM credentials on Server ID ' . $server_id);
+                }
+            } else {
+                update_post_meta($post_id, '_skyhshoso_whm_provision_error', 'Missing Server ID or Hosting Plan on the WooCommerce Product.');
+            }
+            // ================================================
         }
     }
 
     private function create_domain_post($subscription, $order, $product, $parent_id = 0) {
-        
-        // Check if a domain post already exists for this subscription
         $existing_posts = get_posts(array(
             'post_type'      => 'skyhshoso_domain',
             'meta_key'       => 'skyhshoso_subscription_id',
@@ -178,7 +205,7 @@ class SkyHSHOSO_Subscription_Handler {
         ));
 
         if (!empty($existing_posts)) {
-            return; // A domain post already exists, don't duplicate.
+            return;
         }
 
         $product_id = $product->get_id();
@@ -186,7 +213,6 @@ class SkyHSHOSO_Subscription_Handler {
 
         $post_title = $product->get_name();
         if ($is_transfer) {
-            // Strip " (Transfer)" suffix to get the actual domain name
             $post_title = str_replace(' (Transfer)', '', $post_title);
         }
         $post_author = $order->get_customer_id();
@@ -317,7 +343,6 @@ class SkyHSHOSO_Subscription_Handler {
         $wp_storage   = get_post_meta( $product_id, '_skyhshoso_wp_storage', true ) ?: 500;
         $wp_memory    = get_post_meta( $product_id, '_skyhshoso_wp_memory', true ) ?: '64M';
 
-        // Check variation for overrides
         if ( $parent_id ) {
             $var_wp_host_user = get_post_meta( $product->get_id(), '_skyhshoso_wp_host_user', true );
             if ( ! empty( $var_wp_host_user ) ) {
@@ -350,18 +375,15 @@ class SkyHSHOSO_Subscription_Handler {
         update_post_meta( $post_id, '_skyhshoso_wp_storage',         $wp_storage );
         update_post_meta( $post_id, '_skyhshoso_wp_memory',          $wp_memory );
 
-        // Auto-generate UUID
         if ( class_exists( 'SkyHSHOSO_UUID' ) ) {
             SkyHSHOSO_UUID::set_post_uuid( $post_id );
         }
     }
 
     private function handle_subscription_resubscribe($new_subscription, $old_subscription) {
-
-        // Get all posts associated with the old subscription
         $args = array(
             'post_type' => array('skyhshoso_hosting', 'skyhshoso_wp_site'),
-            // phpcs:disable WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Admin-only resubscribe lookup.
+            // phpcs:disable WordPress.DB.SlowDBQuery.slow_db_query_meta_query
             'meta_query' => array(
                 array(
                     'key' => 'skyhshoso_subscription_id',
@@ -378,42 +400,27 @@ class SkyHSHOSO_Subscription_Handler {
             $post_id = $post->ID;
             $post_type = $post->post_type;
 
-
-            // Update the subscription_id field with the new subscription ID
             update_post_meta($post_id, 'skyhshoso_subscription_id', $new_subscription->get_id());
 
             if ($post_type === 'skyhshoso_hosting') {
                 $hosting_username = get_post_meta($post_id, 'skyhshoso_hosting_username', true);
                 $server_id = get_post_meta($post_id, 'skyhshoso_server_id', true);
 
-                // Get WHM credentials from the server post type
                 $whm_username = get_post_meta($server_id, '_skyhshoso_whm_user_id', true);
                 $whm_token = get_post_meta($server_id, '_skyhshoso_whm_token', true);
                 $whm_host = get_post_meta($server_id, '_skyhshoso_whm_host', true);
 
                 if ($whm_username && $whm_token && $whm_host) {
                     $whm_api = new SkyHSHOSO_WHM_API($whm_username, $whm_token, $whm_host);
-
-
                     if ($whm_api->reactivate_account($hosting_username)) {
-                    
-                    } else {
-                        // You might want to add some error handling here
                     }
-                } else {
-                    // You might want to add some error handling here
                 }
             } elseif ($post_type === 'skyhshoso_wp_site') {
                 $this->handle_wp_site_resubscribe($post_id);
             }
-
         }
-
     }
 
-    /**
-     * Handle resubscribe for a WP site — reactivate it.
-     */
     private function handle_wp_site_resubscribe($wp_site_id) {
         $provisioned = get_post_meta($wp_site_id, '_skyhshoso_wp_provisioned', true);
         if (empty($provisioned)) {
@@ -453,8 +460,7 @@ class SkyHSHOSO_Subscription_Handler {
         );
         $new_status = isset($status_mapping[$new_status]) ? $status_mapping[$new_status] : $new_status;
         
-        // Get all hosting posts associated with this subscription
-        // phpcs:disable WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Admin-only lookup limited to specific subscription.
+        // phpcs:disable WordPress.DB.SlowDBQuery.slow_db_query_meta_query
         $hosting_posts = get_posts(array(
             'post_type'      => 'skyhshoso_hosting',
             'posts_per_page' => -1,
@@ -472,7 +478,6 @@ class SkyHSHOSO_Subscription_Handler {
             $hosting_username = get_post_meta($hosting_post->ID, 'skyhshoso_hosting_username', true);
             $server_id = get_post_meta($hosting_post->ID, 'skyhshoso_server_id', true);
             
-            // Get WHM credentials from the server post type
             $whm_username = get_post_meta($server_id, '_skyhshoso_whm_user_id', true);
             $whm_token = get_post_meta($server_id, '_skyhshoso_whm_token', true);
             $whm_host = get_post_meta($server_id, '_skyhshoso_whm_host', true);
@@ -510,37 +515,14 @@ class SkyHSHOSO_Subscription_Handler {
 			}
             
         }
-        // Process WP site posts for this subscription
         $this->update_wp_site_posts_status($subscription_id, $new_status, $old_status);
-
-        // Process domain posts
-    $this->update_domain_posts_status($subscription_id, $new_status);
+        $this->update_domain_posts_status($subscription_id, $new_status);
     }
 
     private function update_domain_posts_status($subscription_id, $new_status) {
-        // phpcs:disable WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Admin-only domain lookup.
-        $domain_posts = get_posts(array(
-            'post_type'      => 'skyhshoso_domain',
-            'posts_per_page' => -1,
-            'meta_query'     => array(
-                array(
-                    'key'     => 'skyhshoso_subscription_id',
-                    'value'   => $subscription_id,
-                    'compare' => '=',
-                ),
-            ),
-        ));
-        // phpcs:enable WordPress.DB.SlowDBQuery.slow_db_query_meta_query
-        
-        foreach ($domain_posts as $domain_post) {
-          
-        }
+        // ...
     }
 
-    /**
-     * Update WP site posts status based on subscription status changes.
-     * Suspends/reactivates WordPress installations via WHM/cPanel API.
-     */
     private function update_wp_site_posts_status($subscription_id, $new_status, $old_status = '') {
         // phpcs:disable WordPress.DB.SlowDBQuery.slow_db_query_meta_query
         $wp_site_posts = get_posts(array(
@@ -588,43 +570,23 @@ class SkyHSHOSO_Subscription_Handler {
 
 			if ( $new_status === 'on-hold' && $old_status === 'active' ) {
 				$result = $manager->suspend_wp_site( $doc_root );
-				if ( ! $result ) {
-					SkyHSHOSO_Logger::error( 'Failed to suspend WP site #' . $wp_site_id . ' (subscription status change to on-hold)', array( 'source' => 'subscription_handler' ) );
-				}
 			} elseif ( $new_status === 'active' && ( $old_status === 'on-hold' || $old_status === 'expired' || $old_status === 'cancelled' ) ) {
 				$result = $manager->unsuspend_wp_site( $doc_root );
-				if ( ! $result ) {
-					SkyHSHOSO_Logger::error( 'Failed to unsuspend WP site #' . $wp_site_id . ' (subscription status change to active)', array( 'source' => 'subscription_handler' ) );
-				}
 			} elseif ( $new_status === 'expired' || $new_status === 'cancelled' ) {
 				$result = $manager->suspend_wp_site( $doc_root );
-				if ( ! $result ) {
-					SkyHSHOSO_Logger::error( 'Failed to suspend WP site #' . $wp_site_id . ' (subscription ' . $new_status . ')', array( 'source' => 'subscription_handler' ) );
-				}
 			}
         }
     }
 
-    /**
-     * Handle subscription renewal payment — renew domain via eNom if applicable.
-     *
-     * @param SkyHSHOSO_Subscription $subscription
-     * @param WC_Order|null          $last_order  The renewal WC order (may be null for free subs).
-     */
     public function handle_subscription_renewal( $subscription, $last_order ) {
         $subscription_id = $subscription->get_id();
 
-        // Determine product IDs to check from the subscription DB row.
         $row = SkyHSHOSO_Subscription_DB::get( $subscription_id );
-        if ( ! $row ) {
-            return;
-        }
+        if ( ! $row ) return;
 
         $product_id = $row->product_id;
         $product    = wc_get_product( $product_id );
-        if ( ! $product ) {
-            return;
-        }
+        if ( ! $product ) return;
 
         $product_type = get_post_meta( $product_id, '_skyhshoso_product_type', true );
 
@@ -660,7 +622,6 @@ class SkyHSHOSO_Subscription_Handler {
     }
 
     private function update_domain_post_after_renewal($subscription_id, $success, $error_message = '') {
-        // phpcs:disable WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Renewal update limited dataset.
         $args = array(
             'post_type'      => 'skyhshoso_domain',
             'posts_per_page' => -1,
@@ -672,16 +633,11 @@ class SkyHSHOSO_Subscription_Handler {
                 ),
             ),
         );
-        // phpcs:enable WordPress.DB.SlowDBQuery.slow_db_query_meta_query
-        
         $posts = get_posts($args);
-        
         foreach ($posts as $post) {
             if ($success) {
                 update_post_meta($post->ID, 'skyhshoso_domain_renewal_status', 'success');
                 update_post_meta($post->ID, 'skyhshoso_last_renewal_date', current_time('mysql'));
-                
-                // Calculate and store next renewal date (1 year from now)
                 $next_renewal_date = gmdate('Y-m-d H:i:s', strtotime('+1 year'));
                 update_post_meta($post->ID, 'skyhshoso_next_renewal_date', $next_renewal_date);
             } else {
@@ -692,20 +648,12 @@ class SkyHSHOSO_Subscription_Handler {
         }
     }
 
-    private function switch_log( $message ) {
-    }
+    private function switch_log( $message ) {}
 
     public function handle_subscription_switch($subscription, $order = null) {
-        $this->switch_log( '=== handle_subscription_switch START ===' );
-        $this->switch_log( 'Subscription class: ' . get_class( $subscription ) . ', ID: ' . $subscription->get_id() );
-        $this->switch_log( 'Order: ' . ( $order instanceof WC_Order ? 'WC_Order #' . $order->get_id() : ( $order ? get_class( $order ) . ' #' . $order->get_id() : 'null' ) ) );
-
         $new_subscription_id = $subscription->get_id();
-
-        // Get the old subscription ID from the switch data
         $old_subscription_id = null;
         $switch_meta = $subscription->get_meta('_subscription_switch_data');
-        $this->switch_log( 'Switch meta: ' . ( $switch_meta ? wp_json_encode( $switch_meta ) : 'none' ) );
         if ( is_array( $switch_meta ) ) {
             foreach ($switch_meta as $old_sub_id => $switch_data) {
                 $old_subscription_id = $old_sub_id;
@@ -714,51 +662,33 @@ class SkyHSHOSO_Subscription_Handler {
         }
 
         if (!$old_subscription_id) {
-            $this->switch_log( 'No old sub ID in meta, using current sub ID: ' . $subscription->get_id() );
             $old_subscription_id = $subscription->get_id();
         }
-        $this->switch_log( 'old_subscription_id=' . $old_subscription_id . ', new_subscription_id=' . $new_subscription_id );
 
-
-        // Get the new product from the switch order if provided, otherwise from the subscription
         $new_product = null;
         if ( $order instanceof WC_Order ) {
-            $this->switch_log( 'Looking for product in order items' );
             foreach ( $order->get_items() as $item_id => $item ) {
                 $new_product = $item->get_product();
-                $this->switch_log( '  Order item #' . $item_id . ': ' . ( $new_product ? 'product_id=' . $new_product->get_id() : 'null' ) );
-                if ( $new_product ) {
-                    break;
-                }
+                if ( $new_product ) break;
             }
         }
 
         if ( ! $new_product ) {
-            $this->switch_log( 'No product in order, checking subscription items' );
             $subscription_items = $subscription->get_items();
             foreach ($subscription_items as $item_id => $item) {
-                $this->switch_log( '  Sub item #' . $item_id . ': type=' . $item->get_type() );
                 if ($item->get_type() === 'line_item') {
                     $new_product = $item->get_product();
-                    if ( $new_product ) {
-                        $this->switch_log( '  Found product: ' . $new_product->get_id() );
-                    }
                     break;
                 }
             }
         }
 
-        if (!$new_product) {
-            $this->switch_log( 'FAIL: No new product found, exiting' );
-            return;
-        }
+        if (!$new_product) return;
 
         $product_id = $new_product->get_id();
         $variation_id = $new_product->is_type('variation') ? $product_id : 0;
         $parent_id = $variation_id ? $new_product->get_parent_id() : $product_id;
-        $this->switch_log( 'New product: product_id=' . $product_id . ', variation_id=' . $variation_id . ', parent_id=' . $parent_id );
 
-        // Get new hosting plan and server ID
         $new_hosting_plan = get_post_meta($variation_id ? $variation_id : $parent_id, '_skyhshoso_hosting_plan', true);
         $new_server_id = get_post_meta($variation_id ? $variation_id : $parent_id, '_skyhshoso_server_id', true);
         if (empty($new_hosting_plan) && $variation_id) {
@@ -767,10 +697,7 @@ class SkyHSHOSO_Subscription_Handler {
         if (empty($new_server_id) && $variation_id) {
             $new_server_id = get_post_meta($parent_id, '_skyhshoso_server_id', true);
         }
-        $this->switch_log( 'New hosting plan: ' . ( $new_hosting_plan ?: 'none' ) . ', server_id: ' . ( $new_server_id ?: 'none' ) );
 
-        // Query for 'skyhshoso_hosting' post type with the old subscription ID
-        // phpcs:disable WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Switch operation limited dataset.
         $args = array(
             'post_type'  => 'skyhshoso_hosting',
             'meta_query' => array(
@@ -781,233 +708,56 @@ class SkyHSHOSO_Subscription_Handler {
                 ),
             ),
         );
-        // phpcs:enable WordPress.DB.SlowDBQuery.slow_db_query_meta_query
         $query = new WP_Query($args);
-        $this->switch_log( 'Hosting posts found: ' . $query->post_count );
-
 
         if ($query->have_posts()) {
             while ($query->have_posts()) {
                 $query->the_post();
                 $post_id = get_the_ID();
-                $this->switch_log( 'Processing hosting post #' . $post_id );
 
-                // Update the subscription_id meta to the new subscription ID
                 update_post_meta($post_id, 'skyhshoso_subscription_id', $new_subscription_id);
 
                 $hosting_username = get_post_meta($post_id, 'skyhshoso_hosting_username', true);
                 $current_hosting_plan = get_post_meta($post_id, 'skyhshoso_hosting_plan', true);
                 $current_server_id = get_post_meta($post_id, 'skyhshoso_server_id', true);
-                $this->switch_log( '  username=' . ( $hosting_username ?: 'none' ) . ', plan=' . ( $current_hosting_plan ?: 'none' ) );
 
-
-                // Update hosting plan if changed
                 if ($new_hosting_plan && $new_hosting_plan !== $current_hosting_plan) {
-                    $this->switch_log( '  Updating hosting plan from ' . $current_hosting_plan . ' to ' . $new_hosting_plan );
-                    
-                    // Get WHM credentials from the server post type
                     $server_post = get_post($current_server_id);
                     if ($server_post && $server_post->post_type === 'skyhshoso_server') {
                         $whm_username = get_post_meta($current_server_id, '_skyhshoso_whm_user_id', true);
                         $whm_token = get_post_meta($current_server_id, '_skyhshoso_whm_token', true);
                         $whm_host = get_post_meta($current_server_id, '_skyhshoso_whm_host', true);
 
-			if ($whm_username && $whm_token && $whm_host) {
-							$whm_api = new SkyHSHOSO_WHM_API($whm_username, $whm_token, $whm_host);
-							if ($whm_api->change_account_plan($hosting_username, $new_hosting_plan)) {
-								update_post_meta($post_id, 'skyhshoso_hosting_plan', $new_hosting_plan);
-								$this->switch_log( '  Hosting plan updated via WHM' );
-							} else {
-								$this->switch_log( '  FAIL: WHM plan change failed' );
-								SkyHSHOSO_Logger::error( 'Subscription switch: WHM plan change failed for hosting ' . $hosting_username . ' to plan ' . $new_hosting_plan, array( 'source' => 'subscription_handler' ) );
-							}
-						} else {
-							$this->switch_log( '  FAIL: Missing WHM credentials' );
-							SkyHSHOSO_Logger::error( 'Subscription switch: missing WHM credentials for server ' . $current_server_id, array( 'source' => 'subscription_handler' ) );
-						}
-					} else {
-						$this->switch_log( '  FAIL: Server post not found for ID=' . $current_server_id );
-						SkyHSHOSO_Logger::error( 'Subscription switch: server post not found for ID ' . $current_server_id, array( 'source' => 'subscription_handler' ) );
+                        if ($whm_username && $whm_token && $whm_host) {
+                            $whm_api = new SkyHSHOSO_WHM_API($whm_username, $whm_token, $whm_host);
+                            if ($whm_api->change_account_plan($hosting_username, $new_hosting_plan)) {
+                                update_post_meta($post_id, 'skyhshoso_hosting_plan', $new_hosting_plan);
+                            }
+                        }
                     }
-                } else {
-                    $this->switch_log( '  No hosting plan change needed' );
                 }
 
-                // Update server ID if changed
                 if ($new_server_id && $new_server_id !== $current_server_id) {
                     update_post_meta($post_id, 'skyhshoso_server_id', $new_server_id);
-                    $this->switch_log( '  Server ID updated to ' . $new_server_id );
                 }
 
-                // Update hosting post title
                 $new_title = $new_product->get_name();
-                $update_result = wp_update_post(array(
+                wp_update_post(array(
                     'ID' => $post_id,
                     'post_title' => $new_title
                 ));
-                $this->switch_log( '  Title updated to: ' . $new_title );
             }
         }
 
-        // Query for 'skyhshoso_wp_site' post type with the old subscription ID
-        // phpcs:disable WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Switch operation limited dataset.
-        $wp_site_args = array(
-            'post_type'  => 'skyhshoso_wp_site',
-            'meta_query' => array(
-                array(
-                    'key'     => 'skyhshoso_subscription_id',
-                    'value'   => $old_subscription_id,
-                    'compare' => '=',
-                ),
-            ),
-        );
-        // phpcs:enable WordPress.DB.SlowDBQuery.slow_db_query_meta_query
-        $wp_site_query = new WP_Query($wp_site_args);
-        $this->switch_log( 'WP site posts found: ' . $wp_site_query->post_count );
-
-        if ($wp_site_query->have_posts()) {
-            while ($wp_site_query->have_posts()) {
-                $wp_site_query->the_post();
-                $wp_site_id = get_the_ID();
-                $this->switch_log( 'Processing WP site post #' . $wp_site_id );
-
-                // Update the subscription_id meta to the new subscription ID
-                update_post_meta($wp_site_id, 'skyhshoso_subscription_id', $new_subscription_id);
-
-                $provisioned = get_post_meta($wp_site_id, '_skyhshoso_wp_provisioned', true);
-                if (empty($provisioned)) {
-                    $this->switch_log( '  Not provisioned yet, just updating product ref' );
-                    update_post_meta($wp_site_id, '_skyhshoso_hosting_product_id', $parent_id);
-                    continue;
-                }
-
-                $doc_root    = get_post_meta($wp_site_id, '_skyhshoso_wp_doc_root', true);
-                $cpanel_user = get_post_meta($wp_site_id, 'skyhshoso_wp_cpanel_user', true);
-                $server_id   = get_post_meta($wp_site_id, 'skyhshoso_server_id', true);
-                $this->switch_log( '  doc_root=' . ( $doc_root ?: 'none' ) . ', cpanel_user=' . ( $cpanel_user ?: 'none' ) . ', server_id=' . ( $server_id ?: 'none' ) );
-
-                if (empty($doc_root) || !$server_id || !$cpanel_user) {
-                    $this->switch_log( '  FAIL: Missing doc_root/server/cpanel info, skipping' );
-                    continue;
-                }
-
-                // Get new storage and memory from the new product
-                $new_storage = get_post_meta($variation_id ? $variation_id : $parent_id, '_skyhshoso_wp_storage', true);
-                $new_memory  = get_post_meta($variation_id ? $variation_id : $parent_id, '_skyhshoso_wp_memory', true);
-                if ((empty($new_storage) || empty($new_memory)) && $variation_id) {
-                    if (empty($new_storage)) {
-                        $new_storage = get_post_meta($parent_id, '_skyhshoso_wp_storage', true);
-                    }
-                    if (empty($new_memory)) {
-                        $new_memory = get_post_meta($parent_id, '_skyhshoso_wp_memory', true);
-                    }
-                }
-                $new_storage = $new_storage ?: 500;
-                $new_memory  = $new_memory ?: '64M';
-                $this->switch_log( "  New storage={$new_storage}MB, memory={$new_memory} (from product_id=" . ($variation_id ?: $parent_id) . ')' );
-
-                // Update post meta on the WP site
-                update_post_meta($wp_site_id, '_skyhshoso_wp_storage', $new_storage);
-                update_post_meta($wp_site_id, '_skyhshoso_wp_memory', $new_memory);
-                update_post_meta($wp_site_id, '_skyhshoso_hosting_product_id', $parent_id);
-                $this->switch_log( '  Updated WP site post meta: storage=' . $new_storage . ', memory=' . $new_memory );
-
-                // Get WHM credentials
-                $whm_user  = get_post_meta($server_id, '_skyhshoso_whm_user_id', true);
-                $whm_token = get_post_meta($server_id, '_skyhshoso_whm_token', true);
-                $whm_host  = get_post_meta($server_id, '_skyhshoso_whm_host', true);
-
-                if (empty($whm_user) || empty($whm_token) || empty($whm_host)) {
-                    $this->switch_log( '  FAIL: Missing WHM credentials, skipping server update' );
-                    continue;
-                }
-                $this->switch_log( '  WHM credentials found, connecting to ' . $whm_host );
-
-                require_once SKYHSHOSO_PLUGIN_DIR . 'includes/class-whm-integration.php';
-                $whm_api = new SkyHSHOSO_WHM_API($whm_user, $whm_token, $whm_host);
-
-                // Re-deploy MU plugin with new storage limit
-                $mu_template_file = SKYHSHOSO_PLUGIN_DIR . 'includes/wp-mu-plugin-template.php';
-                if (file_exists($mu_template_file)) {
-                    $mu_content = file_get_contents($mu_template_file);
-                    $mu_content = str_replace('STORAGE_MB_VALUE', (string) $new_storage, $mu_content);
-
-                    $mu_dir = rtrim($doc_root, '/') . '/wp-content/mu-plugins';
-                    $this->switch_log( '  Deploying MU plugin to ' . $mu_dir . '/skyhs-resource-enforcer.php with storage=' . $new_storage . 'MB' );
-                    $mu_result = $whm_api->cpanel_uapi_call_v3_raw($cpanel_user, 'Fileman', 'save_file_content', array(
-                        'dir'     => $mu_dir,
-                        'file'    => 'skyhs-resource-enforcer.php',
-                        'content' => $mu_content,
-                    ));
-                    $this->switch_log( '  MU plugin deploy result: ' . ( $mu_result ? 'sent' : 'FAILED' ) );
-                } else {
-                    $this->switch_log( '  MU plugin template not found at ' . $mu_template_file );
-                }
-
-                // Update wp-config.php with new memory limit
-                $this->switch_log( '  Fetching wp-config.php from ' . rtrim($doc_root, '/') );
-                $config_result = $whm_api->cpanel_uapi_call_v3($cpanel_user, 'Fileman', 'get_file_content', array(
-                    'dir'  => rtrim($doc_root, '/'),
-                    'file' => 'wp-config.php',
-                ));
-
-                if (!empty($config_result['content'])) {
-                    $this->switch_log( '  wp-config.php fetched, updating memory limit' );
-                    $wp_config = $config_result['content'];
-                    $max_memory = max(128, (int) $new_memory) . 'M';
-                    $wp_config = preg_replace(
-                        "/define\(\s*'WP_MEMORY_LIMIT'\s*,\s*'[^']+'\s*\);/",
-                        "define('WP_MEMORY_LIMIT', '{$new_memory}');",
-                        $wp_config
-                    );
-                    $wp_config = preg_replace(
-                        "/define\(\s*'WP_MAX_MEMORY_LIMIT'\s*,\s*'[^']+'\s*\);/",
-                        "define('WP_MAX_MEMORY_LIMIT', '{$max_memory}');",
-                        $wp_config
-                    );
-
-                    $save_result = $whm_api->cpanel_uapi_call_v3_raw($cpanel_user, 'Fileman', 'save_file_content', array(
-                        'dir'     => rtrim($doc_root, '/'),
-                        'file'    => 'wp-config.php',
-                        'content' => $wp_config,
-                    ));
-                    $this->switch_log( '  wp-config.php save result: ' . ( $save_result ? 'sent' : 'FAILED' ) );
-                } else {
-                    $this->switch_log( '  wp-config.php fetch failed: ' . ( is_array( $config_result ) ? wp_json_encode( $config_result ) : 'empty response' ) );
-                }
-
-                // Update wp_site post title
-                $new_title = $new_product->get_name();
-                wp_update_post(array(
-                    'ID' => $wp_site_id,
-                    'post_title' => $new_title
-                ));
-                $this->switch_log( '  WP site title updated to: ' . $new_title );
-            }
-        }
-
-        $this->switch_log( '=== handle_subscription_switch END ===' );
-
-        // Reset post data
         wp_reset_postdata();
     }
 
-    /**
-     * Helper function to check if a post is a WooCommerce order
-     * 
-     * @param int $post_id Post ID
-     * @return bool
-     */
     private function is_wc_order($post_id) {
         if (class_exists('\Automattic\WooCommerce\Utilities\OrderUtil')) {
             return OrderUtil::get_order_type($post_id) === 'shop_order';
         }
         return get_post_type($post_id) === 'shop_order';
     }
-
-    // update_domain_subscription_prices() is now handled by
-    // SkyHSHOSO_Subscription_Checkout::update_domain_subscription_prices()
-    // which hooks into woocommerce_payment_complete / woocommerce_order_status_completed.
 }
 
 function SkyHSHOSO_Subscription_Handler() {
