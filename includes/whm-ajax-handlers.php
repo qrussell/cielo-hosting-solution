@@ -138,7 +138,7 @@ function skyhshoso_wp_provision_callback() {
         'content' => $payload
     ]);
 
-    // 5. Trigger the Payload via the PRIMARY DOMAIN (Bypasses new domain DNS limits)
+    // 5. Trigger the Payload via the PRIMARY DOMAIN
     $trigger_url = "http://{$clean_primary}{$relative_trigger_path}/{$filename}";
     $response = wp_remote_get($trigger_url, ['timeout' => 60, 'sslverify' => false]);
 

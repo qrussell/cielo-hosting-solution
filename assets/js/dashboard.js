@@ -839,7 +839,19 @@
 
         provisionBtn.addEventListener('click', function() {
             var wpSiteId = this.getAttribute('data-id');
-            var domain = domainInput ? domainInput.value.trim() : '';
+            var prefixInput = document.getElementById('skyhshoso-wp-domain-prefix');
+            var baseSelect = document.getElementById('skyhshoso-wp-domain-base');
+            var fallbackInput = document.getElementById('skyhshoso-wp-domain-input'); // Just in case
+            
+            var domain = '';
+            if (prefixInput && baseSelect) {
+                // Combine prefix and base domain (e.g., "sam" + "." + "cielocloud.xyz")
+                var rawPrefix = prefixInput.value.trim().replace(/[^a-zA-Z0-9-]/g, ''); // Clean special chars
+                if (!rawPrefix) rawPrefix = 'wp' + Math.floor(Math.random() * 900 + 100);
+                domain = rawPrefix + '.' + baseSelect.value.trim();
+            } else if (fallbackInput) {
+                domain = fallbackInput.value.trim();
+            }
 
             if (!domain) {
                 if (resultEl) resultEl.innerHTML = '<p style="color:#d63638;font-size:13px;">Please enter a domain.</p>';

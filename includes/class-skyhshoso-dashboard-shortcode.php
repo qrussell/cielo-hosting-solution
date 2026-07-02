@@ -984,7 +984,18 @@ class SkyHSHOSO_Dashboard_Shortcode {
         <?php 
         // Generate a clean, unique subdomain based on the primary domain
         $clean_hosting_domain = str_replace(['www.', 'https://', 'http://'], '', $hosting_domain);
-        $unique_subdomain = 'wp' . rand(100, 999) . '.' . $clean_hosting_domain;
+        
+        $settings = get_option( 'skyhshoso_settings_group', array() );
+        $base_domains_setting = isset($settings['wp_base_domains']) ? $settings['wp_base_domains'] : '';
+        $base_domains = array_filter(array_map('trim', explode(',', $base_domains_setting)));
+        
+        // Fallback to the user's primary domain if the admin didn't configure any
+        if (empty($base_domains)) {
+            $base_domains = [$clean_hosting_domain];
+        }
+
+        // Generate a clean, unique prefix
+        $unique_prefix = 'wp' . rand(100, 999);
         ?>
         <div id="skyhshoso-wp-install-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.6); z-index:9999; align-items:center; justify-content:center;">
             <div style="background:#fff; padding:32px; border-radius:12px; width:100%; max-width:450px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.1);">
@@ -995,8 +1006,16 @@ class SkyHSHOSO_Dashboard_Shortcode {
                     
                     <div style="margin-bottom: 16px;">
                         <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Domain Name</label>
-                        <input type="text" id="skyhshoso-wp-domain-input" placeholder="e.g., <?php echo esc_attr($unique_subdomain); ?>" value="<?php echo esc_attr($unique_subdomain); ?>" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box;">
-                        <p style="font-size:11px; color:#64748b; margin:4px 0 0 0;">An isolated subdomain has been generated for you, or you can enter any other domain you own.</p>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <input type="text" id="skyhshoso-wp-domain-prefix" placeholder="e.g., sam" value="<?php echo esc_attr($unique_prefix); ?>" style="flex: 1; padding:10px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box; font-family: monospace; text-align: right;">
+                            <span style="font-weight: 700; color: #64748b;">.</span>
+                            <select id="skyhshoso-wp-domain-base" style="flex: 1.5; padding:10px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box; background: #f8fafc; font-family: monospace;">
+                                <?php foreach ($base_domains as $b_domain) : ?>
+                                    <option value="<?php echo esc_attr($b_domain); ?>"><?php echo esc_html($b_domain); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <p style="font-size:11px; color:#64748b; margin:6px 0 0 0;">Customize the prefix to create a unique URL for this installation.</p>
                     </div>
 
                     <div style="margin-bottom: 16px;">

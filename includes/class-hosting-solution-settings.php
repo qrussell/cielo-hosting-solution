@@ -198,6 +198,15 @@ class SkyHSHOSO_Settings {
 			'skyhshoso_settings_group',
 			'hosting_solution_general_section'
 		);
+
+        // --- NEW: Add the WP Base Domains Field ---
+        add_settings_field(
+            'wp_base_domains',
+            __( 'WordPress Base Domains', 'skyhs-hosting-solution' ),
+            array( $this, 'render_wp_base_domains_field' ),
+            'skyhshoso_settings_group',
+            'hosting_solution_general_section'
+        );
 	}
 
     /**
@@ -234,6 +243,10 @@ class SkyHSHOSO_Settings {
 		if ( isset( $input['enable_wc_log'] ) ) {
 			$sanitized_input['enable_wc_log'] = ! empty( $input['enable_wc_log'] ) ? 1 : 0;
 		}
+        // --- NEW: Sanitize WP Base Domains ---
+        if ( isset( $input['wp_base_domains'] ) ) {
+            $sanitized_input['wp_base_domains'] = sanitize_text_field( $input['wp_base_domains'] );
+        }
 
 		// --- Billing settings ---
         if ( isset( $input['grace_period_days'] ) ) {
@@ -349,6 +362,16 @@ class SkyHSHOSO_Settings {
      */
     public function render_general_section() {
         echo '<p>' . esc_html__( 'Configure general settings for Hosting Solution plugin.', 'skyhs-hosting-solution' ) . '</p>';
+    }
+
+    /**
+     * --- NEW: Render wp base domains field ---
+     */
+    public function render_wp_base_domains_field() {
+        $options = get_option( 'skyhshoso_settings_group', array() );
+        $value = isset( $options['wp_base_domains'] ) ? $options['wp_base_domains'] : '';
+        echo '<input type="text" name="skyhshoso_settings_group[wp_base_domains]" value="' . esc_attr( $value ) . '" class="regular-text ltr" style="width: 100%; max-width: 400px;">';
+        echo '<p class="description">' . esc_html__( 'Comma-separated list of domains for WP provisioning (e.g., cielocloud.dev, cielocloud.xyz). If blank, defaults to the user\'s primary hosting domain.', 'skyhs-hosting-solution' ) . '</p>';
     }
 
     // -------------------------------------------------------------------------
