@@ -351,6 +351,22 @@ class SkyHSHOSO_Menu_Organizer {
                             </label>
                         </div>
 
+                        <div class="skyhshoso-wizard-form-group">
+                            <label><?php esc_html_e( 'Enable WC Log', 'skyhs-hosting-solution' ); ?></label>
+                            <label style="font-weight:400;">
+                                <input type="hidden" name="skyhshoso_settings_group[enable_wc_log]" value="0">
+                                <input type="checkbox" name="skyhshoso_settings_group[enable_wc_log]" value="1" <?php checked( 1, ! empty( $options['enable_wc_log'] ) ); ?>>
+                                <?php esc_html_e( 'Log server, hosting, domain, WordPress, and subscription creation failures to WooCommerce logs (WooCommerce > Status > Logs)', 'skyhs-hosting-solution' ); ?>
+                            </label>
+                        </div>
+
+                        <div class="skyhshoso-wizard-form-group">
+                            <label><?php esc_html_e( 'WordPress Base Domains', 'skyhs-hosting-solution' ); ?></label>
+                            <?php $wp_base_domains = isset( $options['wp_base_domains'] ) ? $options['wp_base_domains'] : ''; ?>
+                            <input type="text" name="skyhshoso_settings_group[wp_base_domains]" value="<?php echo esc_attr( $wp_base_domains ); ?>" class="regular-text ltr" style="width: 100%; max-width: 400px;">
+                            <p style="font-size:12px;color:#646970;margin:8px 0 0 0;"><?php esc_html_e( 'Comma-separated list of domains for WP provisioning (e.g., cielocloud.dev, cielocloud.xyz). If blank, defaults to the user\'s primary hosting domain.', 'skyhs-hosting-solution' ); ?></p>
+                        </div>
+
                         <div class="skyhshoso-wizard-actions">
                             <div></div>
                             <div>

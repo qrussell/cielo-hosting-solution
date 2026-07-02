@@ -1,6 +1,6 @@
 /**
  * SkyHS Dashboard JavaScript
- * Unified and deduplicated version.
+ * Unified and deduplicated version with Live Chunked WP Discovery.
  */
 (function() {
     'use strict';
@@ -11,6 +11,67 @@
         dashboardNonce: typeof skyhshosoDashboard !== 'undefined' && skyhshosoDashboard.nonce ? skyhshosoDashboard.nonce : '',
         switchNonce: typeof skyhshosoDashboard !== 'undefined' && skyhshosoDashboard.switchNonce ? skyhshosoDashboard.switchNonce : '',
         i18n: typeof skyhshosoDashboard !== 'undefined' && skyhshosoDashboard.i18n ? skyhshosoDashboard.i18n : {}
+    };
+
+    // Global Fleet Scanner Function
+    window.skyhshosoProcessAsyncFleetScan = function(hostingIds) {
+        var tbody = document.getElementById('skyhshoso-wp-site-tbody');
+        if (!tbody) return;
+
+        var scanningRow = document.createElement('tr');
+        scanningRow.id = 'skyhs-fleet-scanning-row';
+        scanningRow.innerHTML = '<td colspan="3" style="text-align:center; padding:15px; color:#6b7280; font-size:13px;"><span class="skyhshoso-spinner" style="display:inline-block;width:14px;height:14px;border:2px solid #cbd5e1;border-top-color:#3b82f6;border-radius:50%;animation:spin 1s linear infinite;vertical-align:middle;margin-right:8px;"></span> Live scanning server directories...</td>';
+        tbody.appendChild(scanningRow);
+
+        var existingUrls = [];
+        tbody.querySelectorAll('.skyhshoso-wp-row').forEach(function(row) {
+            existingUrls.push(row.getAttribute('data-url'));
+        });
+
+        var promises = hostingIds.map(function(hId) {
+            var fd = new FormData();
+            fd.append('action', 'skyhshoso_get_scan_targets');
+            fd.append('hosting_id', hId);
+            fd.append('nonce', config.dashboardNonce);
+
+            return fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fd) })
+            .then(r => r.json())
+            .then(d => {
+                if (d.success && d.data.targets) {
+                    var targetPromises = d.data.targets.map(function(target) {
+                        var cdF = new FormData();
+                        cdF.append('action', 'skyhshoso_check_wp_target');
+                        cdF.append('hosting_id', hId);
+                        cdF.append('username', d.data.username);
+                        cdF.append('doc_root', target.doc_root);
+                        cdF.append('url', target.url);
+                        cdF.append('nonce', config.dashboardNonce);
+
+                        return fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(cdF) })
+                        .then(r => r.json())
+                        .then(res => {
+                            if (res.success && res.data.is_wp) {
+                                var cleanUrl = target.url.replace(/^https?:\/\//,'');
+                                if (!existingUrls.includes(cleanUrl)) {
+                                    existingUrls.push(cleanUrl);
+                                    var tempDiv = document.createElement('tbody');
+                                    tempDiv.innerHTML = res.data.row_html;
+                                    tbody.insertBefore(tempDiv.firstChild, scanningRow);
+                                }
+                            }
+                        }).catch(() => {});
+                    });
+                    return Promise.all(targetPromises);
+                }
+            }).catch(() => {});
+        });
+
+        Promise.all(promises).then(function() {
+            scanningRow.remove();
+            if (existingUrls.length === 0) {
+                 tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:20px;">No WordPress installations found.</td></tr>';
+            }
+        });
     };
 
     function initRedirect() {
@@ -75,6 +136,12 @@
                     currentPage = d.data.current_page;
                     totalPages = d.data.total_pages;
                     renderControls();
+                    
+                    // Kick off chunked fleet scanner if instructed by PHP
+                    if (d.data.hosting_queue && typeof window.skyhshosoProcessAsyncFleetScan === 'function') {
+                        window.skyhshosoProcessAsyncFleetScan(d.data.hosting_queue);
+                    }
+
                     if (noResults) {
                         var hasRows = tbody.querySelectorAll('tr').length > 0;
                         noResults.style.display = hasRows ? 'none' : 'block';
@@ -233,7 +300,6 @@
         });
     }
 
-    // --- BULLETPROOF CPANEL & WP SSO LOGIN HANDLER (Event Delegation) ---
     function initCPanelLogin() {
         document.addEventListener('click', function(e) {
             
@@ -394,7 +460,7 @@
                 });
             }
 
-            // 5. Check if the user clicked the Change Domain Button (Handles both Fleet View and Dropdown UI)
+            // 5. Check if the user clicked the Change Domain Button
             var changeDomainBtn = e.target.closest('.skyhshoso-wp-change-domain-btn');
             if (changeDomainBtn) {
                 e.preventDefault();
@@ -403,7 +469,6 @@
                 var cd_oUrl = changeDomainBtn.getAttribute('data-old-url');
                 var cd_dRoot = changeDomainBtn.getAttribute('data-docroot');
 
-                // Support for dynamically reading from dropdown when inside the detail panel
                 if (!cd_oUrl) {
                     var dropdown = document.getElementById('skyhshoso-wp-selector-' + cd_hId);
                     if (dropdown && dropdown.options[dropdown.selectedIndex] && dropdown.value) {
@@ -452,12 +517,14 @@
         });
     }
 
-    // --- WP SITE SCANNER FOR HOSTING DETAIL DROPDOWN ---
+    // --- WP SITE ASYNC SCANNER FOR DROPDOWN ---
     function initWpSiteScanner() {
         var wpSelectors = document.querySelectorAll('.skyhshoso-wp-site-selector');
         wpSelectors.forEach(function(selector) {
             var hostingId = selector.getAttribute('data-hosting-id');
             var nonce = selector.getAttribute('data-nonce') || config.dashboardNonce;
+            
+            selector.innerHTML = '<option value="">Scanning...</option>';
             
             var fd = new FormData();
             fd.append('action', 'skyhshoso_scan_wp_sites');
@@ -468,25 +535,75 @@
                 .then(function(r) { return r.json(); })
                 .then(function(res) {
                     selector.innerHTML = ''; 
-                    if(res.success && res.data.sites && res.data.sites.length > 0) {
-                        res.data.sites.forEach(function(site) {
+                    var existingUrls = [];
+                    
+                    if(res.success && res.data.local_sites && res.data.local_sites.length > 0) {
+                        res.data.local_sites.forEach(function(site) {
+                            var cleanUrl = site.url.replace(/^https?:\/\//,''); // Strip it cleanly
+                            existingUrls.push(cleanUrl);
+                            
                             var option = document.createElement('option');
-                            option.value = site.url; 
+                            option.value = site.url; // Keep https hidden in the value for the buttons
                             option.setAttribute('data-docroot', site.doc_root || site.path);
                             option.setAttribute('data-insid', site.insid || '');
-                            option.textContent = site.url;
+                            option.textContent = cleanUrl; // Display the clean version
                             selector.appendChild(option);
                         });
-                        
-                        // Optionally auto-enable adjacent buttons if desired
-                        var loginBtn = document.querySelector('.skyhshoso-wp-login-btn[data-hosting-id="'+hostingId+'"]');
-                        if (loginBtn) loginBtn.disabled = false;
-                        var domainBtn = document.querySelector('.skyhshoso-wp-change-domain-btn[data-hosting-id="'+hostingId+'"]');
-                        if (domainBtn) domainBtn.disabled = false;
-                        
-                    } else {
-                        selector.innerHTML = '<option value="">No WP Installations Found</option>';
                     }
+
+                    // Kick off async live scanner
+                    var scanOpt = document.createElement('option');
+                    scanOpt.value = "";
+                    scanOpt.textContent = "Live scanning directories...";
+                    selector.appendChild(scanOpt);
+
+                    var tFd = new FormData();
+                    tFd.append('action', 'skyhshoso_get_scan_targets');
+                    tFd.append('hosting_id', hostingId);
+                    tFd.append('nonce', nonce);
+
+                    fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(tFd) })
+                    .then(r => r.json())
+                    .then(d => {
+                        if (d.success && d.data.targets) {
+                            var targetPromises = d.data.targets.map(function(target) {
+                                var cFd = new FormData();
+                                cFd.append('action', 'skyhshoso_check_wp_target');
+                                cFd.append('hosting_id', hostingId);
+                                cFd.append('username', d.data.username);
+                                cFd.append('doc_root', target.doc_root);
+                                cFd.append('url', target.url);
+                                cFd.append('nonce', nonce);
+
+                                return fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(cFd) })
+                                .then(r => r.json())
+                                .then(checkRes => {
+                                    if (checkRes.success && checkRes.data.is_wp) {
+                                        var cleanUrl = target.url.replace(/^https?:\/\//,'');
+                                        if (!existingUrls.includes(cleanUrl)) {
+                                            existingUrls.push(cleanUrl);
+                                            var tempSel = document.createElement('select');
+                                            tempSel.innerHTML = checkRes.data.option_html;
+                                            selector.insertBefore(tempSel.firstChild, scanOpt);
+                                        }
+                                    }
+                                }).catch(()=>{});
+                            });
+                            
+                            Promise.all(targetPromises).then(function() {
+                                scanOpt.remove();
+                                if (existingUrls.length === 0) {
+                                    selector.innerHTML = '<option value="">No WP Installations Found</option>';
+                                }
+                                var loginBtn = document.querySelector('.skyhshoso-wp-login-btn[data-hosting-id="'+hostingId+'"]');
+                                if (loginBtn) loginBtn.disabled = false;
+                                var domainBtn = document.querySelector('.skyhshoso-wp-change-domain-btn[data-hosting-id="'+hostingId+'"]');
+                                if (domainBtn) domainBtn.disabled = false;
+                            });
+                        } else {
+                            scanOpt.remove();
+                        }
+                    }).catch(()=>{ scanOpt.remove(); });
                 })
                 .catch(function() {
                     selector.innerHTML = '<option value="">Error scanning sites</option>';
@@ -781,9 +898,7 @@
         });
     }
 
-    function initCpanelDashboard() {
-        // Redundant due to removal of nested WP management view, but kept to not break anything.
-    }
+    function initCpanelDashboard() {}
 
     function formatBytes(bytes) {
         if (!bytes || bytes === 0) return '0 B';
@@ -815,38 +930,21 @@
         var loadMsg = document.getElementById('skyhshoso-wp-load-msg');
 
         var steps = [
-            {
-                svg: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:26px;height:26px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" /></svg>',
-                msg: 'Setting up your environment'
-            },
-            {
-                svg: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:26px;height:26px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.58 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.58 4 8 4s8-1.79 8-4M4 7c0-2.21 3.58-4 8-4s8 1.79 8 4m0 5c0 2.21-3.58 4-8 4s-8-1.79-8-4" /></svg>',
-                msg: 'Configuring the database'
-            },
-            {
-                svg: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:26px;height:26px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>',
-                msg: 'Downloading WordPress core'
-            },
-            {
-                svg: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:26px;height:26px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>',
-                msg: 'Applying your settings'
-            },
-            {
-                svg: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:26px;height:26px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>',
-                msg: 'Almost done...'
-            }
+            { svg: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:26px;height:26px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" /></svg>', msg: 'Prepping Server Environment' },
+            { svg: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:26px;height:26px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.58 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.58 4 8 4s8-1.79 8-4M4 7c0-2.21 3.58-4 8-4s8 1.79 8 4m0 5c0 2.21-3.58 4-8 4s-8-1.79-8-4" /></svg>', msg: 'Assigning Network Routing' },
+            { svg: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:26px;height:26px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>', msg: 'Sweeping Default Files' },
+            { svg: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:26px;height:26px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>', msg: 'Finalizing setup...' }
         ];
 
         provisionBtn.addEventListener('click', function() {
             var wpSiteId = this.getAttribute('data-id');
             var prefixInput = document.getElementById('skyhshoso-wp-domain-prefix');
             var baseSelect = document.getElementById('skyhshoso-wp-domain-base');
-            var fallbackInput = document.getElementById('skyhshoso-wp-domain-input'); // Just in case
+            var fallbackInput = document.getElementById('skyhshoso-wp-domain-input'); 
             
             var domain = '';
             if (prefixInput && baseSelect) {
-                // Combine prefix and base domain (e.g., "sam" + "." + "cielocloud.xyz")
-                var rawPrefix = prefixInput.value.trim().replace(/[^a-zA-Z0-9-]/g, ''); // Clean special chars
+                var rawPrefix = prefixInput.value.trim().replace(/[^a-zA-Z0-9-]/g, ''); 
                 if (!rawPrefix) rawPrefix = 'wp' + Math.floor(Math.random() * 900 + 100);
                 domain = rawPrefix + '.' + baseSelect.value.trim();
             } else if (fallbackInput) {
@@ -857,10 +955,6 @@
                 if (resultEl) resultEl.innerHTML = '<p style="color:#d63638;font-size:13px;">Please enter a domain.</p>';
                 return;
             }
-
-            var adminUser = document.getElementById('skyhshoso-wp-admin-user-input');
-            var adminEmail = document.getElementById('skyhshoso-wp-admin-email-input');
-            var adminPass = document.getElementById('skyhshoso-wp-admin-pass-input');
 
             if (formView) formView.style.display = 'none';
             if (loadingView) loadingView.style.display = 'flex';
@@ -882,12 +976,17 @@
                 }, 250);
             }
 
+            // Fixed the Infinite Loop
             stepInterval = setInterval(function() {
-                stepIndex = (stepIndex + 1) % steps.length;
-                transitionStep(steps[stepIndex]);
+                if (stepIndex < steps.length - 1) {
+                    stepIndex++;
+                    transitionStep(steps[stepIndex]);
+                } else {
+                    clearInterval(stepInterval);
+                }
             }, 2800);
 
-            function showSuccess() {
+            function showSuccess(serverMessage) {
                 clearInterval(stepInterval);
                 if (loadIcon) {
                     loadIcon.classList.add('skyhshoso-wp-fading');
@@ -898,14 +997,17 @@
                             loadCheck.style.display = 'flex';
                             loadCheck.classList.remove('skyhshoso-wp-fading');
                         }
-                        if (loadTitle) loadTitle.textContent = 'All done!';
+                        if (loadTitle) loadTitle.textContent = 'Ready for Installation!';
                         if (loadMsg) {
-                            loadMsg.textContent = 'Your WordPress site is ready';
+                            loadMsg.innerHTML = serverMessage || 'Your domain environment is ready.';
                             loadMsg.style.opacity = '1';
+                            var btnWrap = document.createElement('div');
+                            btnWrap.style.marginTop = '24px';
+                            btnWrap.innerHTML = '<button onclick="window.location.reload()" style="background:#166534; color:#fff; border:none; padding:10px 20px; font-size:14px; border-radius:6px; cursor:pointer; font-weight:600; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">Got it, refresh dashboard</button>';
+                            loadMsg.appendChild(btnWrap);
                         }
                     }, 250);
                 }
-                setTimeout(function() { window.location.reload(); }, 3000);
             }
 
             function showError(msg) {
@@ -914,31 +1016,19 @@
                     loadIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:26px;height:26px;color:#d63638;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>';
                     loadIcon.classList.remove('skyhshoso-wp-fading');
                 }
-                if (loadTitle) loadTitle.textContent = 'Installation failed';
+                if (loadTitle) loadTitle.textContent = 'Configuration failed';
                 if (loadMsg) {
-                    loadMsg.textContent = msg || 'An error occurred. Please try again.';
+                    loadMsg.innerHTML = msg || 'An error occurred. Please try again.';
                     loadMsg.style.opacity = '1';
                     loadMsg.style.color = '#d63638';
                 }
+                var btnWrap = document.createElement('div');
+                btnWrap.style.marginTop = '24px';
+                btnWrap.innerHTML = '<button onclick="window.location.reload()" style="background:#d63638; color:#fff; border:none; padding:10px 20px; font-size:14px; border-radius:6px; cursor:pointer; font-weight:600;">Go Back</button>';
+                loadMsg.appendChild(btnWrap);
             }
-
-            var pluginCheckboxes = document.querySelectorAll('.skyhshoso-wp-plugin:checked');
-            var plugins = [];
-            pluginCheckboxes.forEach(function(cb) { plugins.push(cb.value); });
 
             var params = 'action=skyhshoso_wp_provision&wp_site_id=' + encodeURIComponent(wpSiteId) + '&domain=' + encodeURIComponent(domain) + '&nonce=' + encodeURIComponent(wpProvisionNonce);
-            if (plugins.length) {
-                params += '&plugins=' + encodeURIComponent(plugins.join(','));
-            }
-            if (adminUser && adminUser.value.trim()) {
-                params += '&admin_user=' + encodeURIComponent(adminUser.value.trim());
-            }
-            if (adminEmail && adminEmail.value.trim()) {
-                params += '&admin_email=' + encodeURIComponent(adminEmail.value.trim());
-            }
-            if (adminPass && adminPass.value.trim()) {
-                params += '&admin_pass=' + encodeURIComponent(adminPass.value.trim());
-            }
 
             var xhr = new XMLHttpRequest();
             xhr.open('POST', config.ajaxUrl, true);
@@ -947,7 +1037,7 @@
                 try {
                     var resp = JSON.parse(xhr.responseText);
                     if (resp.success) {
-                        showSuccess();
+                        showSuccess(resp.data.message);
                     } else {
                         showError(resp.data.message || 'Installation failed.');
                     }
@@ -1016,7 +1106,7 @@
         initCpanelDashboard();
         initWpSiteProvision();
         initWpPasswordToggle();
-        initWpSiteScanner(); // Added WP Scanner Initializer
+        initWpSiteScanner(); 
         
         setupPagination({
             paginationContainerId: 'skyhshoso-hosting-pagination',

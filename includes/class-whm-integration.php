@@ -62,6 +62,37 @@ class SkyHSHOSO_WHM_API {
         $server_id = get_post_meta($hosting_id, 'skyhshoso_server_id', true);
         $plan = get_post_meta($hosting_id, 'skyhshoso_hosting_plan', true);
         
+        // --- USE FIRST GLOBAL BASE DOMAIN AS DEFAULT ---
+        if (empty($domain)) {
+            $options = get_option('skyhshoso_settings_group', []);
+            $base_domains_raw = $options['wp_base_domains'] ?? '';
+            
+            // Extract domains separated by commas or line breaks
+            $base_domains = array_values(array_filter(preg_split('/[\s,]+/', $base_domains_raw)));
+            
+            if (!empty($base_domains)) {
+                $first_base = str_replace(['https://', 'http://', 'www.', '/'], '', $base_domains[0]);
+                
+                // Generate a dynamic subdomain for the new cPanel account (e.g. cp4921.cielocloud.dev)
+                $domain = 'cp' . rand(1000, 9999) . '.' . $first_base;
+                
+                // Save it to the hosting post meta
+                update_post_meta($hosting_id, 'skyhshoso_hosting_domain', $domain);
+            } else {
+                // Smart Validation: Pause safely if settings are empty
+                $is_admin = current_user_can('administrator') || current_user_can('manage_options');
+                $error_message = $is_admin
+                    ? 'Admin Action Required: Please configure the "WP Base Domains" in General Settings to auto-generate domains.'
+                    : 'System configuration is finalizing. Nothing is wrong with your account, but it is temporarily pending.';
+
+                if (class_exists('SkyHSHOSO_Logger')) {
+                    SkyHSHOSO_Logger::error('WHM account creation halted: No Base Domains configured in settings.', ['source' => 'whm_integration']);
+                }
+                return new WP_Error('missing_base_domain', $error_message);
+            }
+        }
+        // ------------------------------------------------
+
         $author_id = get_post_field('post_author', $hosting_id);
         $author = get_userdata($author_id);
         $user_email = $author ? $author->user_email : '';
@@ -229,195 +260,194 @@ class SkyHSHOSO_WHM_API {
     }
 
     /**
-     * UNIVERSAL WORDPRESS SCANNER
-     * Now captures and returns the exact document root (folder path) for each site.
+     * Discovers all WordPress installations natively across the cPanel account.
+     * Works for WP Toolkit, Softaculous, Installatron, or Manual installations!
      */
-    public function check_wordpress($cpanel_user, $domain, &$debug_info = null) {
-        if (!is_array($debug_info)) $debug_info = [];
-        $wordpress_sites = [];
+    public function check_wordpress($username, $primary_domain, &$debug_data = []) {
+        $found_sites = [];
+        $debug_data[] = "Initiating Universal WP File Scan for $username...";
+
+        $domains_to_check = [];
+        $domains_to_check[] = ['domain' => $primary_domain, 'doc_root' => 'public_html'];
+
+        // 1. Try fetching domains via standard DomainInfo
+        $domain_data = $this->cpanel_uapi_call_v3($username, 'DomainInfo', 'domains_data');
         
-        $dirs_to_check = [
-            'public_html' => "https://{$domain}"
-        ];
-
-        // Gather Subdomains
-        $subdomains = $this->get_subdomains($cpanel_user);
-        foreach ($subdomains as $sub) {
-            if (!empty($sub['root'])) {
-                $rel_path = preg_replace('#^/?home/' . preg_quote($cpanel_user, '#') . '/#', '', $sub['root']);
-                $dirs_to_check[trim($rel_path, '/')] = "https://{$sub['domain']}";
+        if (!empty($domain_data['addon_domains'])) {
+            foreach ($domain_data['addon_domains'] as $addon) {
+                $domains_to_check[] = ['domain' => $addon['domain'], 'doc_root' => $addon['documentroot']];
+            }
+        }
+        if (!empty($domain_data['sub_domains'])) {
+            foreach ($domain_data['sub_domains'] as $sub) {
+                $domains_to_check[] = ['domain' => $sub['domain'], 'doc_root' => $sub['documentroot']];
             }
         }
 
-        // Gather Addon Domains
-        $addons = $this->get_addon_domains($cpanel_user);
-        foreach ($addons as $addon) {
-            if (!empty($addon['root'])) {
-                $rel_path = preg_replace('#^/?home/' . preg_quote($cpanel_user, '#') . '/#', '', $addon['root']);
-                $dirs_to_check[trim($rel_path, '/')] = "https://{$addon['domain']}";
-            }
-        }
-
-        $debug_info[] = "Scanning mapped directories: " . json_encode($dirs_to_check);
-
-        // Gather Softaculous info for Native Softaculous Auto-Login
-        $softaculous_ins = false;
-        $file_data = $this->cpanel_uapi_call_v3_raw( $cpanel_user, 'Fileman', 'get_file_content', [
-            'dir'  => '.softaculous',
-            'file' => 'installations.php',
-        ]);
-        
-        if ( isset($file_data['result']['data']['content']) ) {
-            $content = $file_data['result']['data']['content'];
-            if ( preg_match( '/unserialize\s*\(\s*[\'"](.*?)[\'"]\s*\)/s', $content, $matches ) ) {
-                $serialized_str = str_replace( array( "\\'", "\\\\" ), array( "'", "\\" ), $matches[1] );
-                $softaculous_ins = @unserialize( $serialized_str );
-            }
-        }
-        
-        $wp_installations = [];
-        if ( isset($softaculous_ins[26]) && is_array($softaculous_ins[26]) ) {
-            $wp_installations = $softaculous_ins[26];
-        }
-
-        // Scan mapped directories
-        foreach ( $dirs_to_check as $dir => $url ) {
-            if (empty($dir)) continue;
-
-            $file_check = $this->cpanel_uapi_call_v3_raw($cpanel_user, 'Fileman', 'get_file_information', [
-                'path' => $dir . '/wp-config.php'
-            ]);
-
-            $debug_info[] = "Checking [{$dir}/wp-config.php] -> Response: " . json_encode($file_check);
-
-            $is_wp = false;
-            if (isset($file_check['result']['data'][0]['type']) && $file_check['result']['data'][0]['type'] === 'file') {
-                $is_wp = true;
-            } elseif (isset($file_check['result']['data']['type']) && $file_check['result']['data']['type'] === 'file') {
-                $is_wp = true;
-            }
-
-            if ( $is_wp ) {
-                $insid = '';
-                $norm_check_url = rtrim( preg_replace( '#^https?://(www\.)?#i', '', $url ), '/' );
-                
-                foreach ( $wp_installations as $inst ) {
-                    $inst_url = $inst['softurl'] ?? $inst['url'] ?? '';
-                    if ( $inst_url ) {
-                        $norm_inst_url = rtrim( preg_replace( '#^https?://(www\.)?#i', '', $inst_url ), '/' );
-                        if ( $norm_check_url === $norm_inst_url ) {
-                            $insid = $inst['insid'] ?? '';
-                            break;
-                        }
+        // 2. FALLBACK: If DomainInfo is restricted, use the older, highly reliable methods
+        if (count($domains_to_check) <= 1) {
+            $addons = $this->get_addon_domains($username);
+            if (is_array($addons)) {
+                foreach ($addons as $addon) {
+                    if (!empty($addon['domain']) && !empty($addon['root'])) {
+                        $domains_to_check[] = ['domain' => $addon['domain'], 'doc_root' => $addon['root']];
                     }
                 }
-
-                $wordpress_sites[] = [
-                    'site_url'  => $url,
-                    'admin_url' => rtrim($url, '/') . '/wp-admin/',
-                    'insid'     => $insid,
-                    'doc_root'  => "/home/{$cpanel_user}/" . trim($dir, '/')
-                ];
-            } else {
-                // Check common subdirectories for nested WP Toolkit installs
-                $common_subs = ['wp', 'wordpress', 'site', 'blog'];
-                foreach ($common_subs as $sub) {
-                    $sub_check = $this->cpanel_uapi_call_v3_raw($cpanel_user, 'Fileman', 'get_file_information', [
-                        'path' => $dir . '/' . $sub . '/wp-config.php'
-                    ]);
-                    
-                    $is_sub_wp = false;
-                    if (isset($sub_check['result']['data'][0]['type']) && $sub_check['result']['data'][0]['type'] === 'file') {
-                        $is_sub_wp = true;
-                    } elseif (isset($sub_check['result']['data']['type']) && $sub_check['result']['data']['type'] === 'file') {
-                        $is_sub_wp = true;
-                    }
-
-                    if ($is_sub_wp) {
-                        $site_url = rtrim($url, '/') . '/' . $sub;
-                        $insid = '';
-                        $norm_site_url = rtrim( preg_replace( '#^https?://(www\.)?#i', '', $site_url ), '/' );
-                        
-                        foreach ( $wp_installations as $inst ) {
-                            $inst_url = $inst['softurl'] ?? $inst['url'] ?? '';
-                            if ( $inst_url ) {
-                                $norm_inst_url = rtrim( preg_replace( '#^https?://(www\.)?#i', '', $inst_url ), '/' );
-                                if ( $norm_site_url === $norm_inst_url ) {
-                                    $insid = $inst['insid'] ?? '';
-                                    break;
-                                }
-                            }
-                        }
-
-                        $wordpress_sites[] = [
-                            'site_url'  => $site_url,
-                            'admin_url' => rtrim($site_url, '/') . '/wp-admin/',
-                            'insid'     => $insid,
-                            'doc_root'  => "/home/{$cpanel_user}/" . trim($dir, '/') . '/' . $sub
-                        ];
-                        break;
+            }
+            $subs = $this->get_subdomains($username);
+            if (is_array($subs)) {
+                foreach ($subs as $sub) {
+                    if (!empty($sub['domain']) && !empty($sub['root'])) {
+                        $domains_to_check[] = ['domain' => $sub['domain'], 'doc_root' => $sub['root']];
                     }
                 }
             }
         }
 
-        return $wordpress_sites;
+        $checked_roots = [];
+        // Support scanning the root, PLUS common auto-installer subdirectories!
+        $sub_directories = ['', '/blog', '/wp', '/wordpress']; 
+
+        // 3. Scan each document root natively for wp-config.php
+        foreach ($domains_to_check as $d) {
+            $domain = trim($d['domain']);
+            if (empty($domain)) continue;
+
+            $doc_root_base = preg_replace('#^/?home/' . preg_quote($username, '#') . '/#', '', $d['doc_root']);
+            $doc_root_base = trim($doc_root_base, '/');
+            if (empty($doc_root_base)) $doc_root_base = 'public_html';
+
+            if (in_array($doc_root_base, $checked_roots)) continue;
+            $checked_roots[] = $doc_root_base;
+
+            $found_in_domain = false;
+            
+            // Loop through the root and common subfolders to find WP
+            foreach ($sub_directories as $sub) {
+                $doc_root = $doc_root_base . $sub;
+                $file_req = $this->cpanel_uapi_call_v3_raw($username, 'Fileman', 'get_file_information', [
+                    'path' => $doc_root . '/wp-config.php'
+                ]);
+
+                // If status is 1, the file exists!
+                if (isset($file_req['result']['status']) && $file_req['result']['status'] == 1) {
+                    $debug_data[] = "[SUCCESS] WP detected at: " . $doc_root;
+                    $found_sites[] = [
+                        'site_url' => 'https://' . $domain . $sub, // Accurate URL including subdirectory!
+                        'doc_root' => $doc_root,
+                        'insid'    => '' 
+                    ];
+                    $found_in_domain = true;
+                    break; // Found WP, stop searching subdirectories for this domain
+                }
+            }
+            if (!$found_in_domain) {
+                $debug_data[] = "[MISSING] No WordPress at: " . $doc_root_base;
+            }
+        }
+
+        return $found_sites;
     }
 
-    public function inject_wp_sso_script($cpanel_user, $site_url, $admin_username = '') {
-        $parsed = wp_parse_url($site_url);
-        $host = $parsed['host'] ?? '';
-        $path = $parsed['path'] ?? '';
-        $host = preg_replace('#^www\.#i', '', $host);
-
-        $doc_root = "/home/{$cpanel_user}/public_html"; 
+    /**
+     * Natively bypasses WP Passwords by injecting a self-destructing SSO Token.
+     */
+    public function inject_wp_sso_script($username, $site_url, $admin_user = 'admin') {
+        $clean_url = str_replace(['www.', 'https://', 'http://'], '', rtrim($site_url, '/'));
         
-        $subdomains = $this->get_subdomains($cpanel_user);
-        foreach ($subdomains as $sub) {
-            if ($sub['domain'] === $host && !empty($sub['root'])) $doc_root = $sub['root'];
+        // Separate the domain from the subdirectory (e.g. domain.com/blog -> domain.com)
+        $url_parts = explode('/', $clean_url, 2);
+        $host_domain = $url_parts[0];
+        $sub_path = isset($url_parts[1]) ? trim($url_parts[1], '/') : '';
+        
+        $doc_root = 'public_html'; // Default fallback
+        
+        // 1. Locate the correct folder path for the DOMAIN
+        $domain_data = $this->cpanel_uapi_call_v3($username, 'DomainInfo', 'domains_data');
+        if (!empty($domain_data['main_domain']) && $domain_data['main_domain']['domain'] === $host_domain) {
+            $doc_root = $domain_data['main_domain']['documentroot'];
+        } elseif (!empty($domain_data['addon_domains'])) {
+            foreach ($domain_data['addon_domains'] as $addon) {
+                if ($addon['domain'] === $host_domain) { $doc_root = $addon['documentroot']; break; }
+            }
+        } elseif (!empty($domain_data['sub_domains'])) {
+            foreach ($domain_data['sub_domains'] as $sub) {
+                if ($sub['domain'] === $host_domain) { $doc_root = $sub['documentroot']; break; }
+            }
         }
-        $addons = $this->get_addon_domains($cpanel_user);
-        foreach ($addons as $addon) {
-            if ($addon['domain'] === $host && !empty($addon['root'])) $doc_root = $addon['root'];
+
+        // Clean absolute path for Fileman
+        $doc_root_clean = preg_replace('#^/?home/' . preg_quote($username, '#') . '/#', '', $doc_root);
+        $doc_root_clean = trim($doc_root_clean, '/');
+        if (empty($doc_root_clean)) $doc_root_clean = 'public_html';
+        
+        // Append the subdirectory if the URL has one
+        if (!empty($sub_path)) {
+            $doc_root_clean .= '/' . $sub_path;
+        }
+
+        // 2. Generate the SSO Magic Script
+        $token = wp_generate_password(24, false);
+        $filename = "sso_{$token}.php";
+
+        // THE FIX: The SSO script actively hunts for WordPress in the root AND common subdirectories
+        $payload = "<?php
+        define('WP_USE_THEMES', false);
+        
+        // Hunt for WordPress Core
+        \$wp_loaded = false;
+        \$paths = [
+            './wp-load.php',          // Root
+            './blog/wp-load.php',     // Installatron Default
+            './wp/wp-load.php',       // Softaculous Default
+            './wordpress/wp-load.php' // Standard Default
+        ];
+        
+        foreach (\$paths as \$path) {
+            if (file_exists(\$path)) {
+                require_once(\$path);
+                \$wp_loaded = true;
+                break;
+            }
         }
         
-        if (!empty($path) && $path !== '/') {
-            $doc_root = rtrim($doc_root, '/') . '/' . trim($path, '/');
+        if (!\$wp_loaded) {
+            @unlink(__FILE__);
+            die('SSO Failed: Could not find WordPress in this directory or subdirectories. Ensure it is fully installed.');
         }
         
-        $rel_path = preg_replace('#^/?home/' . preg_quote($cpanel_user, '#') . '/#', '', $doc_root);
+        // Grab the top administrator account regardless of name
+        \$users = get_users(['role' => 'administrator', 'number' => 1]);
+        
+        if (empty(\$users)) {
+            @unlink(__FILE__);
+            die('SSO Failed: No administrator account found.');
+        }
+        
+        \$user = \$users[0];
+        
+        // Authenticate safely
+        wp_set_current_user(\$user->ID, \$user->user_login);
+        wp_set_auth_cookie(\$user->ID, true, is_ssl());
+        do_action('wp_login', \$user->user_login, \$user);
+        
+        // Self-Destruct instantly
+        @unlink(__FILE__);
+        
+        // Redirect perfectly into the WordPress Dashboard
+        wp_safe_redirect(admin_url());
+        exit;
+        ?>";
 
-        $token = wp_generate_password(40, false);
-        $filename = "skyhs_sso_{$token}.php";
-
-        $php_code = "<?php\n";
-        $php_code .= "define('WP_USE_THEMES', false);\n";
-        $php_code .= "require('./wp-load.php');\n";
-        $php_code .= "\$target_user = '" . addslashes($admin_username) . "';\n";
-        $php_code .= "\$user = get_user_by('login', \$target_user);\n";
-        $php_code .= "if (!\$user) {\n";
-        $php_code .= "    \$users = get_users(['role' => 'administrator']);\n";
-        $php_code .= "    if (!empty(\$users)) \$user = \$users[0];\n";
-        $php_code .= "}\n";
-        $php_code .= "if (\$user) {\n";
-        $php_code .= "    wp_clear_auth_cookie();\n";
-        $php_code .= "    wp_set_current_user(\$user->ID);\n";
-        $php_code .= "    wp_set_auth_cookie(\$user->ID);\n";
-        $php_code .= "    @unlink(__FILE__);\n";
-        $php_code .= "    wp_safe_redirect(admin_url());\n";
-        $php_code .= "    exit;\n";
-        $php_code .= "}\n";
-        $php_code .= "@unlink(__FILE__);\n";
-        $php_code .= "die('SSO Failed: No administrator accounts could be found to log into.');\n";
-
-        $result = $this->cpanel_uapi_call_v3_raw($cpanel_user, 'Fileman', 'save_file_content', [
-            'dir' => trim($rel_path, '/'),
-            'file' => $filename,
-            'content' => $php_code
+        // 3. Push the script to the server
+        $req = $this->cpanel_uapi_call_v3_raw($username, 'Fileman', 'save_file_content', [
+            'dir'    => $doc_root_clean,
+            'file'   => $filename,
+            'content'=> $payload
         ]);
 
-        if (isset($result['result']['status']) && $result['result']['status']) {
-            return rtrim($site_url, '/') . '/' . $filename;
+        if (isset($req['result']['status']) && $req['result']['status'] == 1) {
+            return 'https://' . $clean_url . '/' . $filename;
         }
 
         return false;
