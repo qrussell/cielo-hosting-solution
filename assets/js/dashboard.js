@@ -356,10 +356,63 @@
                 });
             }
 
-            // 4. Check if the user clicked the Change Domain Button
+            // 4. Check if the user clicked the Specific WP Login inside Detail Panel
+            var detailWpLoginBtn = e.target.closest('.skyhshoso-wp-login-btn');
+            if (detailWpLoginBtn) {
+                e.preventDefault();
+                var hwId = detailWpLoginBtn.getAttribute('data-hosting-id');
+                var selector = document.getElementById('skyhshoso-wp-selector-' + hwId);
+                var swUrl = selector ? selector.value : '';
+                
+                if (!swUrl) return alert('Please select a WP site first.');
+
+                var origLoginText = detailWpLoginBtn.textContent;
+                detailWpLoginBtn.textContent = 'Connecting...';
+                detailWpLoginBtn.disabled = true;
+
+                var fdl = new FormData();
+                fdl.append('action', 'skyhshoso_generate_wp_sso');
+                fdl.append('hosting_id', hwId);
+                fdl.append('site_url', swUrl);
+                fdl.append('nonce', config.dashboardNonce);
+
+                fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fdl) })
+                .then(r => r.json())
+                .then(d => {
+                    detailWpLoginBtn.disabled = false;
+                    detailWpLoginBtn.textContent = origLoginText;
+                    if (d.success && d.data && d.data.url) {
+                        window.open(d.data.url, '_blank');
+                    } else {
+                        alert('SSO Failed: ' + (d.data ? d.data.message : 'Unknown error'));
+                    }
+                })
+                .catch(err => {
+                    detailWpLoginBtn.disabled = false;
+                    detailWpLoginBtn.textContent = origLoginText;
+                    alert('Connection error.');
+                });
+            }
+
+            // 5. Check if the user clicked the Change Domain Button (Handles both Fleet View and Dropdown UI)
             var changeDomainBtn = e.target.closest('.skyhshoso-wp-change-domain-btn');
             if (changeDomainBtn) {
                 e.preventDefault();
+                
+                var cd_hId = changeDomainBtn.getAttribute('data-hosting-id');
+                var cd_oUrl = changeDomainBtn.getAttribute('data-old-url');
+                var cd_dRoot = changeDomainBtn.getAttribute('data-docroot');
+
+                // Support for dynamically reading from dropdown when inside the detail panel
+                if (!cd_oUrl) {
+                    var dropdown = document.getElementById('skyhshoso-wp-selector-' + cd_hId);
+                    if (dropdown && dropdown.options[dropdown.selectedIndex] && dropdown.value) {
+                        cd_oUrl = dropdown.value;
+                        cd_dRoot = dropdown.options[dropdown.selectedIndex].getAttribute('data-docroot') || '';
+                    }
+                }
+
+                if (!cd_oUrl) return alert('Please select a WP site first.');
                 
                 var newDomain = prompt("Enter the new domain name (e.g., mynewsite.com):\n\nWARNING: Ensure your DNS A-Record points to this server's IP address before proceeding, otherwise the site will go offline.");
                 if (!newDomain) return;
@@ -368,9 +421,6 @@
                 changeDomainBtn.textContent = 'Migrating...';
                 changeDomainBtn.disabled = true;
 
-                var cd_hId = changeDomainBtn.getAttribute('data-hosting-id');
-                var cd_oUrl = changeDomainBtn.getAttribute('data-old-url');
-                var cd_dRoot = changeDomainBtn.getAttribute('data-docroot');
                 var cd_n = changeDomainBtn.getAttribute('data-nonce') || config.dashboardNonce;
 
                 var fdCd = new FormData();
@@ -399,6 +449,48 @@
                     changeDomainBtn.disabled = false;
                 });
             }
+        });
+    }
+
+    // --- WP SITE SCANNER FOR HOSTING DETAIL DROPDOWN ---
+    function initWpSiteScanner() {
+        var wpSelectors = document.querySelectorAll('.skyhshoso-wp-site-selector');
+        wpSelectors.forEach(function(selector) {
+            var hostingId = selector.getAttribute('data-hosting-id');
+            var nonce = selector.getAttribute('data-nonce') || config.dashboardNonce;
+            
+            var fd = new FormData();
+            fd.append('action', 'skyhshoso_scan_wp_sites');
+            fd.append('hosting_id', hostingId);
+            fd.append('nonce', nonce);
+
+            fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fd) })
+                .then(function(r) { return r.json(); })
+                .then(function(res) {
+                    selector.innerHTML = ''; 
+                    if(res.success && res.data.sites && res.data.sites.length > 0) {
+                        res.data.sites.forEach(function(site) {
+                            var option = document.createElement('option');
+                            option.value = site.url; 
+                            option.setAttribute('data-docroot', site.doc_root || site.path);
+                            option.setAttribute('data-insid', site.insid || '');
+                            option.textContent = site.url;
+                            selector.appendChild(option);
+                        });
+                        
+                        // Optionally auto-enable adjacent buttons if desired
+                        var loginBtn = document.querySelector('.skyhshoso-wp-login-btn[data-hosting-id="'+hostingId+'"]');
+                        if (loginBtn) loginBtn.disabled = false;
+                        var domainBtn = document.querySelector('.skyhshoso-wp-change-domain-btn[data-hosting-id="'+hostingId+'"]');
+                        if (domainBtn) domainBtn.disabled = false;
+                        
+                    } else {
+                        selector.innerHTML = '<option value="">No WP Installations Found</option>';
+                    }
+                })
+                .catch(function() {
+                    selector.innerHTML = '<option value="">Error scanning sites</option>';
+                });
         });
     }
 
@@ -912,6 +1004,7 @@
         initCpanelDashboard();
         initWpSiteProvision();
         initWpPasswordToggle();
+        initWpSiteScanner(); // Added WP Scanner Initializer
         
         setupPagination({
             paginationContainerId: 'skyhshoso-hosting-pagination',

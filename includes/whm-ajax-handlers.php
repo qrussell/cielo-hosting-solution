@@ -16,6 +16,153 @@ add_action('wp_ajax_skyhshoso_get_wp_site_page', 'skyhshoso_get_wp_site_page');
 add_action('wp_ajax_skyhshoso_generate_wp_sso', 'skyhshoso_generate_wp_sso');
 add_action('wp_ajax_skyhshoso_assign_custom_domain', 'skyhshoso_assign_custom_domain');
 
+// Endpoints mapped for the individual cPanel WP Management Block
+add_action('wp_ajax_skyhshoso_scan_wp_sites', 'skyhshoso_scan_wp_sites');
+add_action('wp_ajax_skyhshoso_wp_sso_login', 'skyhshoso_generate_wp_sso'); // Aliased to use the existing SSO script
+add_action('wp_ajax_skyhshoso_change_wp_domain', 'skyhshoso_assign_custom_domain'); // Aliased to use the robust payload injector
+/**
+ * =========================================================================
+ * INSTALL NEW WORDPRESS INSTANCE (WP-CLI PAYLOAD INJECTION)
+ * =========================================================================
+ */
+add_action('wp_ajax_skyhshoso_wp_provision', 'skyhshoso_wp_provision_callback');
+function skyhshoso_wp_provision_callback() {
+    $nonce = $_POST['nonce'] ?? '';
+    if (!wp_verify_nonce($nonce, 'skyhshoso_wp_provision') && !wp_verify_nonce($nonce, 'skyhshoso_dashboard_nonce')) {
+        wp_send_json_error(['message' => 'Security check failed.']);
+    }
+
+    $hosting_id = isset($_POST['wp_site_id']) ? absint($_POST['wp_site_id']) : 0;
+    $domain = sanitize_text_field($_POST['domain']);
+    $admin_user = !empty($_POST['admin_user']) ? sanitize_user($_POST['admin_user']) : 'admin';
+    $admin_email = !empty($_POST['admin_email']) ? sanitize_email($_POST['admin_email']) : 'admin@' . $domain;
+    $admin_pass = !empty($_POST['admin_pass']) ? sanitize_text_field($_POST['admin_pass']) : wp_generate_password(16, true);
+
+    $current_user_id = get_current_user_id();
+    $post_author_id = absint(get_post_field('post_author', $hosting_id));
+    if ($current_user_id !== $post_author_id && !current_user_can('administrator')) {
+        wp_send_json_error(['message' => 'Permission denied.']);
+    }
+
+    $server_id = get_post_meta($hosting_id, 'skyhshoso_server_id', true);
+    $username  = get_post_meta($hosting_id, 'skyhshoso_hosting_username', true);
+    $primary_domain = get_post_meta($hosting_id, 'skyhshoso_hosting_domain', true);
+    
+    $whm_api_user  = get_post_meta($server_id, '_skyhshoso_whm_user_id', true);
+    $whm_api_token = get_post_meta($server_id, '_skyhshoso_whm_token', true);
+    $whm_api_host  = get_post_meta($server_id, '_skyhshoso_whm_host', true);
+    
+    if (!class_exists('SkyHSHOSO_WHM_API')) require_once dirname(__FILE__) . '/class-whm-integration.php';
+    $whm_api = new SkyHSHOSO_WHM_API($whm_api_user, $whm_api_token, $whm_api_host);
+
+    $clean_domain = str_replace(['www.', 'https://', 'http://'], '', rtrim($domain, '/'));
+    $clean_primary = str_replace(['www.', 'https://', 'http://'], '', rtrim($primary_domain, '/'));
+
+    // 1. Determine Document Root & Smart Routing (Subdomain vs Addon Domain)
+    $doc_root = 'public_html';
+    $relative_trigger_path = '';
+
+    if ($clean_domain !== $clean_primary) {
+        $doc_root = 'public_html/' . $clean_domain;
+        $relative_trigger_path = '/' . $clean_domain;
+        
+        // Detect if the requested domain is a Subdomain of the Primary Domain
+        $primary_tld_pattern = '/\.' . preg_quote($clean_primary, '/') . '$/i';
+        
+        if (preg_match($primary_tld_pattern, $clean_domain)) {
+            // It is a SUBDOMAIN (e.g. wp732.primary.com)
+            $sub_prefix = preg_replace($primary_tld_pattern, '', $clean_domain);
+            
+            $whm_api->cpanel_uapi_call_v3_raw($username, 'SubDomain', 'addsubdomain', [
+                'domain'     => $sub_prefix,
+                'rootdomain' => $clean_primary,
+                'dir'        => $doc_root
+            ]);
+        } else {
+            // It is a completely different ADDON DOMAIN (e.g. anotherwebsite.com)
+            $addon_args = [
+                'newdomain' => $clean_domain,
+                'dir'       => $doc_root,
+                'subdomain' => substr(str_replace(['.', '-'], '_', $clean_domain), 0, 8) . rand(10,99)
+            ];
+            $whm_api->cpanel_uapi_call_v3_raw($username, 'AddonDomain', 'addaddondomain', $addon_args);
+        }
+    }
+
+    // 2. Create MySQL Database and User via UAPI
+    $db_suffix = substr(md5(time()), 0, 4);
+    $db_name = substr($username, 0, 7) . '_wp' . $db_suffix;
+    $db_user = substr($username, 0, 7) . '_usr' . $db_suffix;
+    $db_pass = wp_generate_password(16, false);
+
+    $whm_api->cpanel_uapi_call_v3_raw($username, 'Mysql', 'create_database', ['name' => $db_name]);
+    $whm_api->cpanel_uapi_call_v3_raw($username, 'Mysql', 'create_user', ['name' => $db_user, 'password' => $db_pass]);
+    $whm_api->cpanel_uapi_call_v3_raw($username, 'Mysql', 'set_privileges_on_database', [
+        'user' => $db_user, 
+        'database' => $db_name, 
+        'privileges' => 'ALL PRIVILEGES'
+    ]);
+
+    // 3. Build WP-CLI Payload Installer
+    $token = wp_generate_password(20, false);
+    $filename = "skyhs_install_{$token}.php";
+
+    $payload = "<?php
+    set_time_limit(300);
+    chdir(__DIR__);
+    \$log = [];
+    
+    if (!file_exists('wp-cli.phar')) {
+        copy('https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar', 'wp-cli.phar');
+    }
+    
+    exec('php wp-cli.phar core download --allow-root 2>&1', \$out1);
+    \$log[] = implode(\"\\n\", \$out1);
+    
+    exec('php wp-cli.phar config create --dbname=\"{$db_name}\" --dbuser=\"{$db_user}\" --dbpass=\"{$db_pass}\" --allow-root 2>&1', \$out2);
+    \$log[] = implode(\"\\n\", \$out2);
+    
+    exec('php wp-cli.phar core install --url=\"https://{$clean_domain}\" --title=\"My WordPress Site\" --admin_user=\"{$admin_user}\" --admin_password=\"{$admin_pass}\" --admin_email=\"{$admin_email}\" --allow-root 2>&1', \$out3);
+    \$log[] = implode(\"\\n\", \$out3);
+    
+    @unlink('wp-cli.phar');
+    @unlink(__FILE__);
+    
+    echo 'SUCCESS|||' . print_r(\$log, true);
+    ";
+
+    // 4. Inject Payload via Fileman
+    $whm_api->cpanel_uapi_call_v3_raw($username, 'Fileman', 'save_file_content', [
+        'dir' => $doc_root,
+        'file' => $filename,
+        'content' => $payload
+    ]);
+
+    // 5. Trigger the Payload via the PRIMARY DOMAIN (Bypasses new domain DNS limits)
+    $trigger_url = "http://{$clean_primary}{$relative_trigger_path}/{$filename}";
+    $response = wp_remote_get($trigger_url, ['timeout' => 60, 'sslverify' => false]);
+
+    // Failsafe cleanup if HTTP failed completely
+    $whm_api->cpanel_uapi_call_v3_raw($username, 'Fileman', 'file_op', [
+        'op' => 'unlink',
+        'sourcefiles' => $doc_root . '/' . $filename
+    ]);
+
+    if (is_wp_error($response)) {
+        wp_send_json_error(['message' => 'Failed to trigger installation. The primary domain (' . $clean_primary . ') is not resolving.']);
+    }
+
+    $body = wp_remote_retrieve_body($response);
+    
+    if (strpos($body, 'SUCCESS') !== false) {
+        SkyHSHOSO_WHM_API::clear_stats_cache($hosting_id);
+        wp_send_json_success(['message' => 'WordPress Installed Successfully!']);
+    } else {
+        $clean_error = strip_tags($body);
+        wp_send_json_error(['message' => 'Installation script executed but WP-CLI failed. Log: ' . substr($clean_error, 0, 500)]);
+    }
+}
+
 function skyhshoso_generate_cpanel_login_url() {
     $nonce = isset( $_POST['nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['nonce'] ) ) : '';
     if ( ! wp_verify_nonce( $nonce, 'skyhshoso_generate_cpanel_login_url_nonce' ) && 
@@ -229,17 +376,89 @@ function skyhshoso_reset_password() { }
 
 /**
  * =========================================================================
+ * SCANNER: Dropdown Populator for specific cPanel accounts
+ * =========================================================================
+ */
+function skyhshoso_scan_wp_sites() {
+    $nonce = $_POST['nonce'] ?? '';
+    if (!wp_verify_nonce($nonce, 'skyhshoso_wp_nonce') && !wp_verify_nonce($nonce, 'skyhshoso_dashboard_nonce')) {
+        wp_send_json_error(['message' => 'Security check failed.']);
+    }
+    
+    $hosting_id = isset($_POST['hosting_id']) ? absint($_POST['hosting_id']) : 0;
+    if (!$hosting_id) {
+        wp_send_json_error(['message' => 'Missing hosting ID.']);
+    }
+
+    $current_user_id = get_current_user_id();
+    $post_author_id = absint(get_post_field('post_author', $hosting_id));
+    $invited_by = get_user_meta($current_user_id, 'skyhshoso_invited_by', true);
+    $invited_by = is_array($invited_by) ? array_map('absint', $invited_by) : [];
+
+    if ($current_user_id !== $post_author_id && !current_user_can('administrator') && !in_array($post_author_id, $invited_by, true)) {
+        wp_send_json_error(['message' => 'Permission denied.']);
+    }
+
+    $server_id = get_post_meta($hosting_id, 'skyhshoso_server_id', true);
+    $username  = get_post_meta($hosting_id, 'skyhshoso_hosting_username', true);
+    $domain    = get_post_meta($hosting_id, 'skyhshoso_hosting_domain', true);
+
+    if (empty($username) || empty($server_id)) {
+        wp_send_json_error(['message' => 'Server or username missing.']);
+    }
+
+    $whm_api_user  = get_post_meta($server_id, '_skyhshoso_whm_user_id', true);
+    $whm_api_token = get_post_meta($server_id, '_skyhshoso_whm_token', true);
+    $whm_api_host  = get_post_meta($server_id, '_skyhshoso_whm_host', true);
+
+    if (empty($whm_api_user) || empty($whm_api_token) || empty($whm_api_host)) {
+        wp_send_json_error(['message' => 'WHM credentials missing.']);
+    }
+
+    if (!class_exists('SkyHSHOSO_WHM_API')) {
+        require_once dirname(__FILE__) . '/class-whm-integration.php';
+    }
+    
+    $whm_api = new SkyHSHOSO_WHM_API($whm_api_user, $whm_api_token, $whm_api_host);
+    $debug_data = [];
+    $discovered_sites = $whm_api->check_wordpress($username, $domain, $debug_data);
+
+    $sites = [];
+    if (!empty($discovered_sites)) {
+        foreach ($discovered_sites as $site) {
+            $sites[] = [
+                'url'      => rtrim($site['site_url'], '/'),
+                'path'     => $site['doc_root'] ?? '',
+                'doc_root' => rtrim($site['doc_root'] ?? '', '/'),
+                'insid'    => $site['insid'] ?? ''
+            ];
+        }
+    }
+    
+    if (!empty($sites)) {
+        wp_send_json_success(['sites' => $sites]);
+    } else {
+        wp_send_json_error(['message' => 'No WordPress installations found on this account.']);
+    }
+}
+
+
+/**
+ * =========================================================================
  * UNIVERSAL SSO INJECTOR (NATIVE AUTO-LOGIN WITHOUT SOFTACULOUS)
  * =========================================================================
  */
 function skyhshoso_generate_wp_sso() {
-    check_ajax_referer('skyhshoso_dashboard_nonce', 'nonce');
+    $nonce = $_POST['nonce'] ?? '';
+    if (!wp_verify_nonce($nonce, 'skyhshoso_wp_nonce') && !wp_verify_nonce($nonce, 'skyhshoso_dashboard_nonce')) {
+        wp_send_json_error(['message' => 'Security check failed.']);
+    }
     
     $current_user_id = get_current_user_id();
     if (!$current_user_id) wp_send_json_error(['message' => 'Not logged in']);
 
     $hosting_id = isset($_POST['hosting_id']) ? absint($_POST['hosting_id']) : 0;
-    $site_url = isset($_POST['site_url']) ? esc_url_raw($_POST['site_url']) : '';
+    $site_url = isset($_POST['site_url']) ? esc_url_raw($_POST['site_url']) : (isset($_POST['wp_path']) ? esc_url_raw($_POST['wp_path']) : '');
 
     if (!$hosting_id || !$site_url) wp_send_json_error(['message' => 'Missing data']);
 
@@ -281,12 +500,15 @@ function skyhshoso_generate_wp_sso() {
  * =========================================================================
  */
 function skyhshoso_assign_custom_domain() {
-    check_ajax_referer('skyhshoso_dashboard_nonce', 'nonce');
+    $nonce = $_POST['nonce'] ?? '';
+    if (!wp_verify_nonce($nonce, 'skyhshoso_wp_nonce') && !wp_verify_nonce($nonce, 'skyhshoso_dashboard_nonce')) {
+        wp_send_json_error(['message' => 'Security check failed.']);
+    }
     
     $hosting_id = absint($_POST['hosting_id']);
     $new_domain = sanitize_text_field($_POST['new_domain']);
-    $old_url    = esc_url_raw($_POST['old_url']);
-    $doc_root   = sanitize_text_field($_POST['doc_root']); 
+    $old_url    = esc_url_raw($_POST['old_url'] ?? $_POST['wp_path'] ?? '');
+    $doc_root   = sanitize_text_field($_POST['doc_root'] ?? ''); 
     
     // Clean inputs
     $new_domain = preg_replace('#^https?://#i', '', $new_domain);
