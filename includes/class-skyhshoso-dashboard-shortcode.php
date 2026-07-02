@@ -26,8 +26,7 @@ class SkyHSHOSO_Dashboard_Shortcode {
 
     /**
      * Get the base URL of the dashboard page.
-     * 
-     * @return string
+     * * @return string
      */
     private static function get_base_url() {
         return get_permalink( get_queried_object_id() );
@@ -204,8 +203,6 @@ class SkyHSHOSO_Dashboard_Shortcode {
                 SKYHSHOSO_VERSION,
                 true
             );
-
-
 
             // Localize script with all needed data
             wp_localize_script(
@@ -392,7 +389,6 @@ class SkyHSHOSO_Dashboard_Shortcode {
                         <?php if ($is_logged_in && $active_tab === 'dashboard') : ?>
                         
                         <div class="skyhshoso-dashboard-grid">
-                            <!-- Left Column: Hosting Plans -->
                             <div class="skyhshoso-dashboard-main">
                                 <h2 class="skyhshoso-section-title"><?php esc_html_e('Hosting Plans', 'skyhs-hosting-solution'); ?></h2>
                                 <div class="skyhshoso-section-content">
@@ -463,7 +459,6 @@ class SkyHSHOSO_Dashboard_Shortcode {
                                 </div>
                             </div>
 
-                            <!-- Right Sidebar: Domains + Collaborators -->
                             <div class="skyhshoso-dashboard-sidebar">
                                 <?php
                                 $domains_handler = new SkyHSHOSO_Account_Domains();
@@ -1199,7 +1194,6 @@ class SkyHSHOSO_Dashboard_Shortcode {
 
         $rows = SkyHSHOSO_Subscription_DB::query( array( 'user_id' => $current_user_id ) );
         ?>
-        <!-- Title removed for Subscriptions -->
         </div>
 
         <div class="skyhshoso-section-content">
@@ -1738,8 +1732,7 @@ class SkyHSHOSO_Dashboard_Shortcode {
 
     /**
      * Render the domain detail view
-     * 
-     * @param int $domain_id The domain ID to display
+     * * @param int $domain_id The domain ID to display
      */
     public static function render_domain_detail($domain_id) {
         // Check if this is a DNS management request
@@ -1855,8 +1848,7 @@ class SkyHSHOSO_Dashboard_Shortcode {
     
     /**
      * Render DNS management interface
-     * 
-     * @param WP_Post $domain The domain post object
+     * * @param WP_Post $domain The domain post object
      */
     private static function render_dns_management($domain) {
         $domain_name = $domain->post_title;
@@ -1899,7 +1891,7 @@ class SkyHSHOSO_Dashboard_Shortcode {
                     <div class="skyhshoso-form-group skyhshoso-material-input">
                         <div class="skyhshoso-input-container">
                     <input type="email" id="invitee_email" name="invitee_email" class="skyhshoso-form-input" placeholder="<?php esc_attr_e('Email Address', 'skyhs-hosting-solution'); ?>" required>
-                           
+                            
                             <div class="skyhshoso-input-underline"></div>
                         </div>
                 </div>
@@ -1916,7 +1908,6 @@ class SkyHSHOSO_Dashboard_Shortcode {
             </div>
         </div>
         
-        <!-- Hidden input for nonces - used by dashboard.js -->
         <input type="hidden" id="skyhshoso-nonce-value" value="<?php echo esc_attr(wp_create_nonce('skyhshoso-collaborator-nonce')); ?>">
         <input type="hidden" id="skyhshoso-ajax-url" value="<?php echo esc_url(admin_url('admin-ajax.php')); ?>">
         
@@ -2009,8 +2000,7 @@ class SkyHSHOSO_Dashboard_Shortcode {
 
     /**
      * Render a domains table
-     * 
-     * @param array $domains The domains to display
+     * * @param array $domains The domains to display
      * @param string $title The title for this group of domains
      */
     private static function render_domains_table($domains, $title) {
@@ -2079,493 +2069,52 @@ class SkyHSHOSO_Dashboard_Shortcode {
     }
 
     // -------------------------------------------------------------------------
-    // WordPress Sites Tab
+    // WordPress Sites Tab (NEW FLEET VIEW)
     // -------------------------------------------------------------------------
 
     public static function render_wp_sites_tab() {
-        $current_user_id = get_current_user_id();
-        $wp_site_id      = isset( $_GET['wp_site_id'] ) ? intval( $_GET['wp_site_id'] ) : 0;
-        $new_wp_site     = isset( $_GET['new_wp_site'] );
-
-        if ( $new_wp_site ) {
-            $product_id = isset( $_GET['product_id'] ) ? intval( $_GET['product_id'] ) : 0;
-            if ( $product_id ) {
-                self::render_new_wp_site_product_detail( $product_id );
-            } else {
-                self::render_new_wp_site_products_list();
-            }
-            return;
-        }
-
-        if ( $wp_site_id ) {
-            self::render_wp_site_detail( $wp_site_id );
-            return;
-        }
-
-        // List WP sites
         ?>
-        <div class="skyhshoso-hosting-header" style="justify-content: flex-end; margin-bottom: 0;">
-            <a href="<?php echo esc_url( add_query_arg( array( 'tab' => 'wp_sites', 'new_wp_site' => 1 ), self::get_base_url() ) ); ?>" class="skyhshoso-new-hosting-btn">
-                <span class="truncate"><?php esc_html_e( 'New WordPress Site', 'skyhs-hosting-solution' ); ?></span>
-            </a>
-        </div>
-        <?php
-        $wppaged = isset( $_GET['wppaged'] ) ? max( 1, intval( $_GET['wppaged'] ) ) : 1;
-        $args = array(
-            'post_type'      => 'skyhshoso_wp_site',
-            'posts_per_page' => 10,
-            'paged'          => $wppaged,
-            'post_status'    => 'publish',
-        );
-        if ( ! current_user_can( 'administrator' ) ) {
-            $invited_by = get_user_meta( $current_user_id, 'skyhshoso_invited_by', true );
-            $invited_by = is_array( $invited_by ) ? $invited_by : array();
-            if ( ! empty( $invited_by ) ) {
-                $args['author__in'] = array_merge( array( $current_user_id ), $invited_by );
-            } else {
-                $args['author'] = $current_user_id;
-            }
-        }
-        $query = new WP_Query( $args );
-        $wp_total_pages = $query->max_num_pages;
+        <div id="skyhshoso-tab-wordpress" class="skyhshoso-tab-content">
+            <div class="skyhshoso-dashboard-header">
+                <h2 style="font-size: 20px; font-weight: 700; color: #111827; margin-bottom: 4px;"><?php esc_html_e('WordPress Sites', 'skyhs-hosting-solution'); ?></h2>
+                <p style="color: #6b7280; font-size: 14px; margin-top: 0;"><?php esc_html_e('Manage all your WordPress installations across your hosting accounts.', 'skyhs-hosting-solution'); ?></p>
+            </div>
 
-        if ( $query->have_posts() ) {
-            ?>
-            <div class="skyhshoso-table-container" id="skyhshoso-wp-site-table-container">
-                <table class="skyhshoso-table" id="skyhshoso-wp-site-table">
-                    <thead>
+            <div class="skyhshoso-table-wrapper" style="margin-top: 20px; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+                <table id="skyhshoso-wp-site-table" class="skyhshoso-table" style="width: 100%; text-align: left; border-collapse: collapse;">
+                    <thead style="background: #f9fafb; border-bottom: 1px solid #e5e7eb;">
                         <tr>
-                            <th><?php esc_html_e( 'Site', 'skyhs-hosting-solution' ); ?></th>
-                            <th><?php esc_html_e( 'Domain', 'skyhs-hosting-solution' ); ?></th>
-                            <th><?php esc_html_e( 'Status', 'skyhs-hosting-solution' ); ?></th>
-                            <th><?php esc_html_e( 'Action', 'skyhs-hosting-solution' ); ?></th>
+                            <th style="padding: 12px 16px; font-size: 12px; font-weight: 600; color: #374151; text-transform: uppercase;">Domain / Source</th>
+                            <th style="padding: 12px 16px; font-size: 12px; font-weight: 600; color: #374151; text-transform: uppercase;">Status</th>
+                            <th style="padding: 12px 16px; font-size: 12px; font-weight: 600; color: #374151; text-transform: uppercase; text-align: right;">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="skyhshoso-wp-site-tbody">
-                        <?php while ( $query->have_posts() ) : $query->the_post();
-                            $id       = get_the_ID();
-                            $domain   = get_post_meta( $id, 'skyhshoso_wp_domain', true );
-                            $provisioned = get_post_meta( $id, '_skyhshoso_wp_provisioned', true );
-                            $site_url = get_post_meta( $id, '_skyhshoso_wp_site_url', true );
-                            $sub_id   = get_post_meta( $id, 'skyhshoso_subscription_id', true );
-                            $status   = 'inactive';
-                            $status_class = 'skyhshoso-status-inactive';
-                            if ( ! empty( $sub_id ) ) {
-                                $sub = skyhshoso_get_subscription( $sub_id );
-                                if ( $sub && in_array( $sub->get_status(), array( 'active', 'pending-cancel' ), true ) ) {
-                                    $status = 'active';
-                                    $status_class = 'skyhshoso-status-active';
-                                }
-                            }
-                            $status_display = ucwords( str_replace( '-', ' ', $status ) );
-                        ?>
                         <tr>
-                            <td><?php the_title(); ?></td>
-                            <td><?php echo esc_html( $domain ?: '—' ); ?></td>
-                            <td><span class="skyhshoso-status-btn <?php echo esc_attr( $status_class ); ?>"><?php echo esc_html( $status_display ); ?></span></td>
-                            <td>
-                                <a href="<?php echo esc_url( add_query_arg( array( 'tab' => 'wp_sites', 'wp_site_id' => $id ), self::get_base_url() ) ); ?>" class="skyhshoso-action-link">
-                                    <?php esc_html_e( 'Manage', 'skyhs-hosting-solution' ); ?>
-                                </a>
+                            <td colspan="3" style="text-align:center; padding: 40px; color: #6b7280;">
+                                <svg class="skyhshoso-spinner-svg" viewBox="0 0 50 50" style="width:24px;height:24px;animation:skyhshoso-spin 1s linear infinite;margin:0 auto 10px auto;display:block;"><circle cx="25" cy="25" r="20" fill="none" stroke-width="5" stroke="#2563eb" stroke-linecap="round"></circle></svg>
+                                <p style="margin: 0; font-size: 14px;">Scanning fleet for WordPress installations...</p>
                             </td>
                         </tr>
-                        <?php endwhile; ?>
                     </tbody>
                 </table>
-                <div id="skyhshoso-wp-site-pagination" class="skyhshoso-pagination-container" data-total-pages="<?php echo esc_attr( $wp_total_pages ); ?>" data-current-page="<?php echo esc_attr( $wppaged ); ?>" data-base-url="<?php echo esc_url( self::get_base_url() ); ?>"></div>
             </div>
-            <?php
-        } else {
-            ?>
-            <div class="skyhshoso-empty-message">
-                <p><?php esc_html_e( 'No WordPress sites yet.', 'skyhs-hosting-solution' ); ?></p>
-            </div>
-            <?php
-        }
-        wp_reset_postdata();
+            
+            <div id="skyhshoso-wp-site-pagination" class="skyhshoso-pagination-container" data-current-page="1" data-total-pages="1" style="display:none;"></div>
+        </div>
+        <?php
     }
 
     public static function render_wp_site_detail( $wp_site_id ) {
-        $post = get_post( $wp_site_id );
-        if ( ! $post || $post->post_type !== 'skyhshoso_wp_site' ) {
-            echo '<p>' . esc_html__( 'WordPress site not found.', 'skyhs-hosting-solution' ) . '</p>';
-            return;
-        }
-
-        $provisioned = get_post_meta( $wp_site_id, '_skyhshoso_wp_provisioned', true );
-        $domain      = get_post_meta( $wp_site_id, 'skyhshoso_wp_domain', true );
-        $site_url    = get_post_meta( $wp_site_id, '_skyhshoso_wp_site_url', true );
-        $admin_user  = get_post_meta( $wp_site_id, 'skyhshoso_wp_admin_user', true );
-        $admin_pass  = get_post_meta( $wp_site_id, 'skyhshoso_wp_admin_pass', true );
-
-        $server_id   = get_post_meta( $wp_site_id, 'skyhshoso_server_id', true );
-        $server_ip   = $server_id ? get_post_meta( $server_id, '_skyhshoso_server_ip', true ) : '';
-        $server_ns   = $server_id ? get_post_meta( $server_id, '_skyhshoso_server_nameservers', true ) : array();
-        $nameservers = is_array( $server_ns ) && ! empty( array_filter( $server_ns ) ) ? $server_ns : get_option( 'skyhshoso_enom_default_nameservers', array() );
-
-        $sub_id = get_post_meta( $wp_site_id, 'skyhshoso_subscription_id', true );
-        $status = 'inactive';
-        $status_class = 'skyhshoso-status-inactive';
-        $next_payment_date = 'N/A';
-        if ( ! empty( $sub_id ) ) {
-            $sub = skyhshoso_get_subscription( $sub_id );
-            if ( $sub ) {
-                $sub_status = $sub->get_status();
-                if ( in_array( $sub_status, array( 'active', 'pending-cancel' ), true ) ) {
-                    $status = 'active';
-                    $status_class = 'skyhshoso-status-active';
-                }
-                $next_payment = $sub->get_date( 'next_payment' );
-                $next_payment_date = $next_payment ? gmdate( 'd-m-Y', strtotime( $next_payment ) ) : 'N/A';
-            }
-        }
-        $status_display = ucwords( str_replace( '-', ' ', $status ) );
-        ?>
-        <div class="skyhshoso-hosting-header" style="justify-content: flex-end;">
-            <a href="<?php echo esc_url( add_query_arg( 'tab', 'wp_sites', self::get_base_url() ) ); ?>" class="skyhshoso-button skyhshoso-button-secondary skyhshoso-back-btn">
-                <span class="skyhshoso-button-icon">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:16px;height:16px;margin-right:6px;vertical-align:middle;display:inline-block;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-                </span>
-                <span class="skyhshoso-button-text"><?php esc_html_e( 'Back to WP Sites', 'skyhs-hosting-solution' ); ?></span>
-            </a>
-        </div>
-
-        <div class="skyhshoso-section-content">
-            <?php if ( ! $provisioned ) : ?>
-                <div class="skyhshoso-detail-card">
-                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-                        <span style="width:8px;height:8px;border-radius:50%;background:#2563eb;display:inline-block;"></span>
-                        <span style="text-transform:uppercase;font-size:11px;font-weight:700;letter-spacing:0.1em;color:#2563eb;"><?php esc_html_e( 'Environment Setup', 'skyhs-hosting-solution' ); ?></span>
-                    </div>
-                    <h2 class="skyhshoso-detail-title" style="margin-bottom:4px;"><?php esc_html_e( 'Provision Your WordPress Site', 'skyhs-hosting-solution' ); ?></h2>
-                    <p style="font-size:13px;color:#64748b;margin:0 0 12px;line-height:1.5;"><?php esc_html_e( 'Enter your domain and admin details below. Blank fields use sensible defaults.', 'skyhs-hosting-solution' ); ?></p>
-                    <div style="display:flex;flex-direction:column;gap:8px;background:#eff6ff;border:1px solid #dbeafe;padding:12px 14px;border-radius:10px;font-size:13px;color:#1e3a8a;margin-bottom:20px;">
-                        <div style="display:flex;gap:8px;align-items:flex-start;">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:16px;height:16px;flex-shrink:0;margin-top:2px;color:#60a5fa;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                            <?php if ( ! empty( $server_ip ) ) : ?>
-                                <span><?php printf( esc_html__( 'Your domain\'s DNS must already point to this server (A record → %s).', 'skyhs-hosting-solution' ), '<strong>' . esc_html( $server_ip ) . '</strong>' ); ?></span>
-                            <?php else : ?>
-                                <span><?php esc_html_e( 'Your domain\'s DNS must already point to this server (A record → server IP).', 'skyhs-hosting-solution' ); ?></span>
-                            <?php endif; ?>
-                        </div>
-                        <?php if ( ! empty( array_filter( $nameservers ) ) ) : ?>
-                            <div style="margin-left:24px;margin-top:2px;font-size:12px;color:#475569;">
-                                <strong><?php esc_html_e( 'Or use the following nameservers:', 'skyhs-hosting-solution' ); ?></strong>
-                                <ul style="margin:4px 0 0;padding-left:16px;list-style-type:disc;">
-                                    <?php foreach ( array_filter( $nameservers ) as $ns ) : ?>
-                                        <li><code><?php echo esc_html( $ns ); ?></code></li>
-                                    <?php endforeach; ?>
-                                </ul>
-                            </div>
-                        <?php endif; ?>
-                    </div>
-
-                    <div id="skyhshoso-wp-provision-form">
-                        <div style="display:flex;flex-direction:column;gap:14px;">
-                            <div>
-                                <label style="display:block;font-size:13px;font-weight:600;color:#334155;margin-bottom:5px;"><?php esc_html_e( 'Domain Name', 'skyhs-hosting-solution' ); ?> <span style="color:#f43f5e;">*</span></label>
-                                <div style="position:relative;">
-                                    <span style="position:absolute;top:50%;transform:translateY(-50%);left:12px;color:#94a3b8;pointer-events:none;display:flex;">
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:15px;height:15px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" /></svg>
-                                    </span>
-                                    <input type="text" id="skyhshoso-wp-domain-input" value="" placeholder="example.com" required style="width:100%;padding:9px 12px 9px 36px;border:1px solid #e2e8f0;border-radius:10px;font-size:13px;color:#0f172a;outline:none;transition:all 0.15s;box-sizing:border-box;" onfocus="this.style.borderColor='#2563eb';this.style.boxShadow='0 0 0 1px #2563eb'" onblur="this.style.borderColor='#e2e8f0';this.style.boxShadow='none'">
-                                </div>
-                            </div>
-                            <div>
-                                <label style="display:block;font-size:13px;font-weight:600;color:#334155;margin-bottom:5px;"><?php esc_html_e( 'Admin Username', 'skyhs-hosting-solution' ); ?></label>
-                                <div style="position:relative;">
-                                    <span style="position:absolute;top:50%;transform:translateY(-50%);left:12px;color:#94a3b8;pointer-events:none;display:flex;">
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:15px;height:15px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                                    </span>
-                                    <input type="text" id="skyhshoso-wp-admin-user-input" value="" placeholder="<?php esc_attr_e( 'Default: admin', 'skyhs-hosting-solution' ); ?>" style="width:100%;padding:9px 12px 9px 36px;border:1px solid #e2e8f0;border-radius:10px;font-size:13px;color:#0f172a;outline:none;transition:all 0.15s;box-sizing:border-box;" onfocus="this.style.borderColor='#2563eb';this.style.boxShadow='0 0 0 1px #2563eb'" onblur="this.style.borderColor='#e2e8f0';this.style.boxShadow='none'">
-                                </div>
-                            </div>
-                            <div>
-                                <label style="display:block;font-size:13px;font-weight:600;color:#334155;margin-bottom:5px;"><?php esc_html_e( 'Admin Email', 'skyhs-hosting-solution' ); ?></label>
-                                <div style="position:relative;">
-                                    <span style="position:absolute;top:50%;transform:translateY(-50%);left:12px;color:#94a3b8;pointer-events:none;display:flex;">
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:15px;height:15px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-                                    </span>
-                                    <input type="email" id="skyhshoso-wp-admin-email-input" value="" placeholder="<?php esc_attr_e( 'Default: your account email', 'skyhs-hosting-solution' ); ?>" style="width:100%;padding:9px 12px 9px 36px;border:1px solid #e2e8f0;border-radius:10px;font-size:13px;color:#0f172a;outline:none;transition:all 0.15s;box-sizing:border-box;" onfocus="this.style.borderColor='#2563eb';this.style.boxShadow='0 0 0 1px #2563eb'" onblur="this.style.borderColor='#e2e8f0';this.style.boxShadow='none'">
-                                </div>
-                            </div>
-                            <div>
-                                <label style="display:block;font-size:13px;font-weight:600;color:#334155;margin-bottom:5px;"><?php esc_html_e( 'Admin Password', 'skyhs-hosting-solution' ); ?></label>
-                                <div style="position:relative;">
-                                    <span style="position:absolute;top:50%;transform:translateY(-50%);left:12px;color:#94a3b8;pointer-events:none;display:flex;">
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:15px;height:15px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                                    </span>
-                                    <input type="password" id="skyhshoso-wp-admin-pass-input" value="" placeholder="<?php esc_attr_e( 'Leave blank to auto-generate', 'skyhs-hosting-solution' ); ?>" style="width:100%;padding:9px 12px 9px 36px;border:1px solid #e2e8f0;border-radius:10px;font-size:13px;color:#0f172a;outline:none;transition:all 0.15s;box-sizing:border-box;" onfocus="this.style.borderColor='#2563eb';this.style.boxShadow='0 0 0 1px #2563eb'" onblur="this.style.borderColor='#e2e8f0';this.style.boxShadow='none'">
-                                </div>
-                            </div>
-                        </div>
-
-                        <div style="margin-top:18px;padding-top:16px;border-top:1px solid #e2e8f0;">
-                            <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:15px;height:15px;color:#f59e0b;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>
-                                <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;"><?php esc_html_e( 'Recommended Plugins', 'skyhs-hosting-solution' ); ?></span>
-                            </div>
-                            <p style="font-size:12px;color:#94a3b8;margin:0 0 12px;line-height:1.5;"><?php esc_html_e( 'Enhance your site with these free plugins. Uncheck any you don\'t want.', 'skyhs-hosting-solution' ); ?></p>
-
-                            <label class="skyhshoso-plugin-option" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;cursor:pointer;transition:all 0.15s;margin-bottom:8px;background:#fff;">
-                                <input type="checkbox" class="skyhshoso-wp-plugin" value="sky-seo-manager" checked style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer;flex-shrink:0;">
-                                <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
-                                    <div style="width:34px;height:34px;border-radius:8px;background:linear-gradient(135deg,#f59e0b,#d97706);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;font-weight:700;color:#fff;">S</div>
-                                    <div style="flex:1;min-width:0;">
-                                        <div style="font-size:13px;font-weight:600;color:#0f172a;">Sky SEO Manager</div>
-                                        <div style="font-size:11px;color:#94a3b8;line-height:1.4;">SEO optimization, meta tags, sitemaps, and search engine tools for better rankings.</div>
-                                    </div>
-                                    <span style="font-size:10px;font-weight:600;color:#10b981;background:#d1fae5;padding:2px 8px;border-radius:4px;flex-shrink:0;"><?php esc_html_e( 'Free', 'skyhs-hosting-solution' ); ?></span>
-                                </div>
-                            </label>
-
-                            <label class="skyhshoso-plugin-option" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;cursor:pointer;transition:all 0.15s;margin-bottom:8px;background:#fff;">
-                                <input type="checkbox" class="skyhshoso-wp-plugin" value="intellichat-ai-chatbot" checked style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer;flex-shrink:0;">
-                                <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
-                                    <div style="width:34px;height:34px;border-radius:8px;background:linear-gradient(135deg,#8b5cf6,#6d28d9);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;font-weight:700;color:#fff;">AI</div>
-                                    <div style="flex:1;min-width:0;">
-                                        <div style="font-size:13px;font-weight:600;color:#0f172a;">IntelliChat AI Chatbot</div>
-                                        <div style="font-size:11px;color:#94a3b8;line-height:1.4;">AI-powered chatbot for customer support, lead generation, and instant answers.</div>
-                                    </div>
-                                    <span style="font-size:10px;font-weight:600;color:#10b981;background:#d1fae5;padding:2px 8px;border-radius:4px;flex-shrink:0;"><?php esc_html_e( 'Free', 'skyhs-hosting-solution' ); ?></span>
-                                </div>
-                            </label>
-                        </div>
-
-                        <button type="button" id="skyhshoso-wp-provision-btn" data-id="<?php echo esc_attr( $wp_site_id ); ?>" style="width:100%;margin-top:12px;background:#2563eb;color:#fff;font-weight:600;font-size:13px;padding:11px 16px;border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all 0.15s;">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:16px;height:16px;color:#bfdbfe;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-                                <?php esc_html_e( 'Install WordPress', 'skyhs-hosting-solution' ); ?>
-                            </button>
-                        </div>
-                    </div>
-                    <div id="skyhshoso-wp-provision-result" style="margin-top:14px;"></div>
-                </div>
-
-                <!-- Loading View -->
-                <div id="skyhshoso-wp-loading" style="display:none;flex-direction:column;align-items:center;justify-content:center;padding:48px 20px;text-align:center;">
-                    <div id="skyhshoso-wp-load-ring" style="width:72px;height:72px;border-radius:50%;border:1px solid rgba(37,99,235,0.18);display:flex;align-items:center;justify-content:center;margin-bottom:28px;position:relative;transition:all 0.5s;">
-                        <span id="skyhshoso-wp-load-icon" style="color:#2563eb;display:flex;transition:opacity 0.25s,transform 0.25s;">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:26px;height:26px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" /></svg>
-                        </span>
-                        <span id="skyhshoso-wp-load-check" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;">
-                            <svg width="30" height="30" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <circle cx="14" cy="14" r="11" stroke="#10b981" stroke-width="2.5" fill="none" stroke-dasharray="100" stroke-dashoffset="100" stroke-linecap="round" style="animation:skyhshoso-draw-circle 0.5s ease forwards;"/>
-                                <polyline points="8.5,14.5 12.5,18.5 19.5,10.5" stroke="#10b981" stroke-width="2.5" fill="none" stroke-dasharray="30" stroke-dashoffset="30" stroke-linecap="round" stroke-linejoin="round" style="animation:skyhshoso-draw-tick 0.4s ease 0.45s forwards;"/>
-                            </svg>
-                        </span>
-                    </div>
-                    <p id="skyhshoso-wp-load-title" style="font-size:15px;font-weight:600;color:#334155;margin:0 0 4px;"><?php esc_html_e( 'Installing...', 'skyhs-hosting-solution' ); ?></p>
-                    <p id="skyhshoso-wp-load-msg" style="font-size:13px;color:#94a3b8;margin:0;transition:opacity 0.25s;"><?php esc_html_e( 'Setting up your environment', 'skyhs-hosting-solution' ); ?></p>
-                </div>
-
-                <style>
-                    @keyframes skyhshoso-breathe { 0%,100%{transform:scale(1);border-color:rgba(37,99,235,0.18)} 50%{transform:scale(1.07);border-color:rgba(37,99,235,0.38)} }
-                    @keyframes skyhshoso-draw-circle { to { stroke-dashoffset: 0; } }
-                    @keyframes skyhshoso-draw-tick { to { stroke-dashoffset: 0; } }
-                    @keyframes skyhshoso-pdot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.8)} }
-                    .skyhshoso-wp-pdot { animation:skyhshoso-pdot 2s ease-in-out infinite; }
-                    .skyhshoso-wp-fading { opacity:0 !important; transform:scale(0.7) !important; }
-                </style>
-            <?php else : ?>
-                <div class="skyhshoso-detail-card" style="overflow:visible;">
-                    <h2 class="skyhshoso-detail-title"><?php esc_html_e( 'Site Information', 'skyhs-hosting-solution' ); ?></h2>
-
-                    <div class="skyhshoso-info-grid" style="overflow:visible;">
-                        <div class="skyhshoso-info-card">
-                            <div class="skyhshoso-info-icon">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" /></svg>
-                            </div>
-                            <div class="skyhshoso-info-details">
-                                <span class="skyhshoso-info-label"><?php esc_html_e( 'Domain', 'skyhs-hosting-solution' ); ?></span>
-                                <span class="skyhshoso-info-value"><?php echo esc_html( $domain ); ?></span>
-                            </div>
-                        </div>
-                        <div class="skyhshoso-info-card">
-                            <div class="skyhshoso-info-icon">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
-                            </div>
-                            <div class="skyhshoso-info-details">
-                                <span class="skyhshoso-info-label"><?php esc_html_e( 'Status', 'skyhs-hosting-solution' ); ?></span>
-                                <span class="skyhshoso-info-value">
-                                    <span class="skyhshoso-status-btn <?php echo esc_attr( $status_class ); ?>"><?php echo esc_html( $status_display ); ?></span>
-                                </span>
-                            </div>
-                        </div>
-                        <div class="skyhshoso-info-card">
-                            <div class="skyhshoso-info-icon">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
-                            </div>
-                            <div class="skyhshoso-info-details">
-                                <span class="skyhshoso-info-label"><?php esc_html_e( 'Site URL', 'skyhs-hosting-solution' ); ?></span>
-                                <span class="skyhshoso-info-value"><a href="<?php echo esc_url( $site_url ); ?>" target="_blank" style="color:#2271b1;text-decoration:none;"><?php echo esc_html( $site_url ); ?></a></span>
-                            </div>
-                        </div>
-                        <div class="skyhshoso-info-card">
-                            <div class="skyhshoso-info-icon">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                            </div>
-                            <div class="skyhshoso-info-details">
-                                <span class="skyhshoso-info-label"><?php esc_html_e( 'Admin Username', 'skyhs-hosting-solution' ); ?></span>
-                                <span class="skyhshoso-info-value"><?php echo esc_html( $admin_user ?: 'admin' ); ?></span>
-                            </div>
-                        </div>
-                        <div class="skyhshoso-info-card" style="overflow:visible;">
-                            <div class="skyhshoso-info-icon">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                            </div>
-                            <div class="skyhshoso-info-details" style="overflow:visible;">
-                                <span class="skyhshoso-info-label"><?php esc_html_e( 'Admin Password', 'skyhs-hosting-solution' ); ?></span>
-                                <span class="skyhshoso-info-value" style="display:flex;align-items:center;gap:8px;white-space:normal;overflow:visible;">
-                                    <code id="skyhshoso-wp-pass-display" style="font-size:13px;background:#f0f2f5;padding:2px 8px;border-radius:4px;user-select:none;">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</code>
-                                    <button type="button" id="skyhshoso-wp-pass-toggle" style="display:inline-flex;align-items:center;justify-content:center;padding:4px 10px;font-size:12px;height:28px;min-height:28px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;color:#475569;" data-pass="<?php echo esc_attr( $admin_pass ); ?>" data-visible="0">
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:14px;height:14px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                                    </button>
-                                    <button type="button" id="skyhshoso-wp-pass-copy" style="display:inline-flex;align-items:center;justify-content:center;padding:4px 10px;font-size:12px;height:28px;min-height:28px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;color:#475569;" data-pass="<?php echo esc_attr( $admin_pass ); ?>">
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:14px;height:14px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                                    </button>
-                                </span>
-                            </div>
-                        </div>
-                        <?php if ( ! empty( $sub_id ) ) : ?>
-                        <div class="skyhshoso-info-card">
-                            <div class="skyhshoso-info-icon">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                            </div>
-                            <div class="skyhshoso-info-details">
-                                <span class="skyhshoso-info-label"><?php esc_html_e( 'Next Payment', 'skyhs-hosting-solution' ); ?></span>
-                                <span class="skyhshoso-info-value"><?php echo esc_html( $next_payment_date ); ?></span>
-                            </div>
-                        </div>
-                        <?php endif; ?>
-
-                        <?php
-                        $display_ip = get_post_meta( $wp_site_id, '_skyhshoso_server_ip', true ) ?: $server_ip;
-                        $display_ns_meta = get_post_meta( $wp_site_id, '_skyhshoso_server_nameservers', true );
-                        $display_ns = ( is_array( $display_ns_meta ) && ! empty( array_filter( $display_ns_meta ) ) ) ? $display_ns_meta : $nameservers;
-                        ?>
-
-                        <?php if ( ! empty( $display_ip ) ) : ?>
-                        <div class="skyhshoso-info-card" style="align-items: flex-start !important;">
-                            <div class="skyhshoso-info-icon" style="margin-top: 2px !important;">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
-                            </div>
-                            <div class="skyhshoso-info-details">
-                                <span class="skyhshoso-info-label"><?php esc_html_e( 'Server IP', 'skyhs-hosting-solution' ); ?></span>
-                                <span class="skyhshoso-info-value" style="margin-top: 2px !important;">
-                                    <code style="font-family: monospace !important; font-size: 12px !important; padding: 3px 8px !important; background-color: #f1f5f9 !important; border: 1px solid #cbd5e1 !important; border-radius: 6px !important; display: inline-block !important; color: #0f172a !important; font-weight: 600 !important;"><?php echo esc_html( $display_ip ); ?></code>
-                                </span>
-                            </div>
-                        </div>
-                        <?php endif; ?>
-
-                        <?php if ( ! empty( array_filter( $display_ns ) ) ) : ?>
-                        <div class="skyhshoso-info-card" style="align-items: flex-start !important;">
-                            <div class="skyhshoso-info-icon" style="margin-top: 2px !important;">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
-                            </div>
-                            <div class="skyhshoso-info-details">
-                                <span class="skyhshoso-info-label"><?php esc_html_e( 'Nameservers', 'skyhs-hosting-solution' ); ?></span>
-                                <span class="skyhshoso-info-value" style="display: flex !important; flex-direction: column !important; gap: 6px !important; white-space: normal !important; overflow: visible !important; margin-top: 4px !important;">
-                                    <?php foreach ( array_filter( $display_ns ) as $ns ) : ?>
-                                        <code style="font-family: monospace !important; font-size: 11px !important; padding: 3px 8px !important; background-color: #f1f5f9 !important; border: 1px solid #cbd5e1 !important; border-radius: 6px !important; display: inline-block !important; width: fit-content !important; color: #334155 !important; font-weight: 500 !important; line-height: 1.2 !important; word-break: break-all !important;"><?php echo esc_html( $ns ); ?></code>
-                                    <?php endforeach; ?>
-                                </span>
-                            </div>
-                        </div>
-                        <?php endif; ?>
-                    </div>
-
-                    <div class="skyhshoso-detail-actions" style="margin-top:24px;">
-                        <a href="<?php echo esc_url( rtrim( $site_url, '/' ) . '/wp-admin' ); ?>" target="_blank" class="skyhshoso-button skyhshoso-button-primary">
-                            <span class="skyhshoso-button-icon">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:16px;height:16px;margin-right:8px;vertical-align:middle;display:inline-block;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h3a3 3 0 013 3v1" /></svg>
-                            </span>
-                            <span class="skyhshoso-button-text"><?php esc_html_e( 'WordPress Admin', 'skyhs-hosting-solution' ); ?></span>
-                        </a>
-                        <a href="<?php echo esc_url( $site_url ); ?>" target="_blank" class="skyhshoso-button skyhshoso-button-secondary">
-                            <span class="skyhshoso-button-icon">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:16px;height:16px;margin-right:8px;vertical-align:middle;display:inline-block;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                            </span>
-                            <span class="skyhshoso-button-text"><?php esc_html_e( 'Visit Site', 'skyhs-hosting-solution' ); ?></span>
-                        </a>
-                    </div>
-                </div>
-            <?php endif; ?>
-        </div>
-        <?php
+        // Obsolete function, replaced by fleet view but kept to prevent fatal errors
     }
 
     public static function render_new_wp_site_products_list() {
-        $args = array(
-            'post_type'      => 'product',
-            'post_status'    => 'publish',
-            'posts_per_page' => -1,
-            'meta_query'     => array( array(
-                'key'   => '_skyhshoso_product_type',
-                'value' => array( 'skyhshoso_wp_site' ),
-            ) ),
-            'tax_query'      => array(
-                array(
-                    'taxonomy' => 'product_visibility',
-                    'field'    => 'name',
-                    'terms'    => 'exclude-from-catalog',
-                    'operator' => 'NOT IN',
-                ),
-            ),
-        );
-        $products = new WP_Query( $args );
-        ?>
-        <div class="skyhshoso-hosting-header">
-            <p class="skyhshoso-hosting-title"><?php esc_html_e( 'Choose a WordPress Plan', 'skyhs-hosting-solution' ); ?></p>
-            <?php if ( is_user_logged_in() ) : ?>
-            <a href="<?php echo esc_url( add_query_arg( 'tab', 'wp_sites', self::get_base_url() ) ); ?>" class="skyhshoso-card-button"><span><?php esc_html_e( 'Back to WP Sites', 'skyhs-hosting-solution' ); ?></span></a>
-            <?php endif; ?>
-        </div>
-
-        <div class="skyhshoso-section-content">
-            <?php if ( $products->have_posts() ) : ?>
-                <?php while ( $products->have_posts() ) : $products->the_post();
-                    $product = wc_get_product( get_the_ID() );
-                    if ( ! $product ) continue;
-                    ?>
-                    <div class="skyhshoso-card" style="margin-bottom:20px;">
-                        <div class="skyhshoso-card-content">
-                            <div class="skyhshoso-card-text">
-                                <p class="skyhshoso-card-title"><?php the_title(); ?></p>
-                                <p class="skyhshoso-card-description"><?php echo wp_kses_post( $product->get_price_html() ); ?></p>
-                            </div>
-                            <a href="<?php echo esc_url( add_query_arg( array( 'tab' => 'wp_sites', 'new_wp_site' => 1, 'product_id' => $product->get_id() ), self::get_base_url() ) ); ?>" class="skyhshoso-card-button"><span><?php esc_html_e( 'Choose', 'skyhs-hosting-solution' ); ?></span></a>
-                        </div>
-                    </div>
-                <?php endwhile; wp_reset_postdata(); ?>
-            <?php else : ?>
-                <div class="skyhshoso-empty-message">
-                    <?php esc_html_e( 'No WordPress site products available at the moment.', 'skyhs-hosting-solution' ); ?><br>
-                    <a href="<?php echo esc_url( add_query_arg( 'tab', 'wp_sites', self::get_base_url() ) ); ?>" class="skyhshoso-card-button" style="display:inline-block; margin-top:10px;">
-                        <span><?php esc_html_e( 'Back to WP Sites', 'skyhs-hosting-solution' ); ?></span>
-                    </a>
-                </div>
-            <?php endif; ?>
-        </div>
-        <?php
+        // Obsolete function, replaced by fleet view but kept to prevent fatal errors
     }
 
     public static function render_new_wp_site_product_detail( $product_id ) {
-        $product = wc_get_product( $product_id );
-        $product_type = get_post_meta( $product_id, '_skyhshoso_product_type', true );
-        if ( ! $product || 'skyhshoso_wp_site' !== $product_type ) {
-            echo '<div class="skyhshoso-empty-message">' . esc_html__( 'This product is not available for WordPress site purchase.', 'skyhs-hosting-solution' ) . '</div>';
-            return;
-        }
-        ?>
-        <div class="skyhshoso-hosting-header" style="justify-content: flex-end;">
-            <a href="<?php echo esc_url( add_query_arg( array( 'tab' => 'wp_sites', 'new_wp_site' => 1 ), self::get_base_url() ) ); ?>" class="skyhshoso-card-button"><span><?php esc_html_e( 'Back', 'skyhs-hosting-solution' ); ?> <?php esc_html_e( 'to WP Sites', 'skyhs-hosting-solution' ); ?></span></a>
-        </div>
-
-        <div class="skyhshoso-section-content" style="padding:0!important;margin:0!important;">
-            <?php echo SkyHSHOSO_Product_Shortcode::render_shortcode( array( 'id' => $product_id, 'show_title' => 'false' ) ); ?>
-        </div>
-        <?php
+        // Obsolete function, replaced by fleet view but kept to prevent fatal errors
     }
 
     /**
@@ -2746,80 +2295,12 @@ class SkyHSHOSO_Dashboard_Shortcode {
     }
 
     /**
-     * AJAX handler: returns a single page of WP site rows as HTML.
+     * AJAX handler: replaced by the aggregated backend handler in whm-ajax-handlers.php.
+     * This is kept to satisfy action hooks without crashing.
      */
     public static function ajax_get_wp_site_page() {
-        if ( ! wp_verify_nonce( $_POST['nonce'] ?? '', 'skyhshoso_dashboard_nonce' ) ) {
-            wp_send_json_error( array( 'message' => 'Invalid nonce' ) );
-        }
-
-        $paged     = isset( $_POST['paged'] ) ? max( 1, intval( $_POST['paged'] ) ) : 1;
-        $search    = isset( $_POST['search'] ) ? sanitize_text_field( wp_unslash( $_POST['search'] ) ) : '';
-        $base_url  = isset( $_POST['base_url'] ) ? esc_url_raw( wp_unslash( $_POST['base_url'] ) ) : '';
-        $current_user_id = get_current_user_id();
-
-        $args = array(
-            'post_type'      => 'skyhshoso_wp_site',
-            'posts_per_page' => 10,
-            'paged'          => $paged,
-            'post_status'    => 'publish',
-        );
-
-        if ( ! current_user_can( 'administrator' ) ) {
-            $invited_by = get_user_meta( $current_user_id, 'skyhshoso_invited_by', true );
-            $invited_by = is_array( $invited_by ) ? $invited_by : array();
-            if ( ! empty( $invited_by ) ) {
-                $args['author__in'] = array_merge( array( $current_user_id ), $invited_by );
-            } else {
-                $args['author'] = $current_user_id;
-            }
-        }
-
-        if ( ! empty( $search ) ) {
-            $args['s'] = $search;
-        }
-
-        $query = new WP_Query( $args );
-        $total_pages = $query->max_num_pages;
-
-        ob_start();
-        if ( $query->have_posts() ) :
-            while ( $query->have_posts() ) : $query->the_post();
-                $id       = get_the_ID();
-                $domain   = get_post_meta( $id, 'skyhshoso_wp_domain', true );
-                $sub_id   = get_post_meta( $id, 'skyhshoso_subscription_id', true );
-                $status   = 'inactive';
-                $status_class = 'skyhshoso-status-inactive';
-                if ( ! empty( $sub_id ) ) {
-                    $sub = skyhshoso_get_subscription( $sub_id );
-                    if ( $sub && in_array( $sub->get_status(), array( 'active', 'pending-cancel' ), true ) ) {
-                        $status = 'active';
-                        $status_class = 'skyhshoso-status-active';
-                    }
-                }
-                $status_display = ucwords( str_replace( '-', ' ', $status ) );
-                ?>
-                <tr>
-                    <td><?php the_title(); ?></td>
-                    <td><?php echo esc_html( $domain ?: '—' ); ?></td>
-                    <td><span class="skyhshoso-status-btn <?php echo esc_attr( $status_class ); ?>"><?php echo esc_html( $status_display ); ?></span></td>
-                    <td>
-                        <a href="<?php echo esc_url( add_query_arg( array( 'tab' => 'wp_sites', 'wp_site_id' => $id ), $base_url ) ); ?>" class="skyhshoso-action-link">
-                            <?php esc_html_e( 'Manage', 'skyhs-hosting-solution' ); ?>
-                        </a>
-                    </td>
-                </tr>
-                <?php
-            endwhile;
-        endif;
-        wp_reset_postdata();
-        $html = ob_get_clean();
-
-        wp_send_json_success( array(
-            'html'         => $html,
-            'total_pages'  => $total_pages,
-            'current_page' => $paged,
-        ) );
+        // Intentionally empty. The actual hook is defined and executed from includes/whm-ajax-handlers.php
+        // which powers the new Fleet Management table.
     }
 }
 

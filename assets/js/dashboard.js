@@ -133,7 +133,12 @@
                 }, 300);
             });
         }
+        
         renderControls();
+
+        if (cfg.autoFetch) {
+            fetchPage(1, '');
+        }
     }
 
     function initPeriodToggle() {
@@ -228,30 +233,26 @@
         });
     }
 
-    // --- BULLETPROOF CPANEL LOGIN HANDLER ---
+    // --- BULLETPROOF CPANEL & WP SSO LOGIN HANDLER (Event Delegation) ---
     function initCPanelLogin() {
-        var btns = document.querySelectorAll('#skyhshoso-cpanel-login-btn, .skyhshoso-cpanel-login-btn, .hm-cpanel-login-btn');
-        if (!btns.length) return;
-
-        btns.forEach(function(btn) {
-            // Remove existing listeners by cloning (prevents double-clicks)
-            var newBtn = btn.cloneNode(true);
-            btn.parentNode.replaceChild(newBtn, btn);
-
-            newBtn.addEventListener('click', function(e) {
+        document.addEventListener('click', function(e) {
+            
+            // 1. Check if the user clicked a Standard cPanel Login Button
+            var cpanelBtn = e.target.closest('#skyhshoso-cpanel-login-btn, .skyhshoso-cpanel-login-btn, .hm-cpanel-login-btn');
+            if (cpanelBtn) {
                 e.preventDefault();
-                var txt = newBtn.querySelector('.skyhshoso-button-text');
-                var origText = txt ? txt.textContent : newBtn.textContent;
+                var txt = cpanelBtn.querySelector('.skyhshoso-button-text');
+                var origText = txt ? txt.textContent : cpanelBtn.textContent;
                 
                 if (txt) {
                     txt.textContent = 'Connecting...';
                 } else {
-                    newBtn.textContent = 'Connecting...';
+                    cpanelBtn.textContent = 'Connecting...';
                 }
-                newBtn.disabled = true;
+                cpanelBtn.disabled = true;
 
-                var hostingId = newBtn.getAttribute('data-hosting-id');
-                var nonce = newBtn.getAttribute('data-nonce') || config.dashboardNonce;
+                var hostingId = cpanelBtn.getAttribute('data-hosting-id');
+                var nonce = cpanelBtn.getAttribute('data-nonce') || config.dashboardNonce;
 
                 var fd = new FormData();
                 fd.append('action', 'skyhshoso_generate_cpanel_login_url');
@@ -269,15 +270,135 @@
                     } else {
                         alert('Failed to connect: ' + (d.data ? d.data.message : 'Unauthorized'));
                     }
-                    if (txt) txt.textContent = origText; else newBtn.textContent = origText;
-                    newBtn.disabled = false;
+                    if (txt) txt.textContent = origText; else cpanelBtn.textContent = origText;
+                    cpanelBtn.disabled = false;
                 })
                 .catch(function() {
                     alert('A connection error occurred.');
-                    if (txt) txt.textContent = origText; else newBtn.textContent = origText;
-                    newBtn.disabled = false;
+                    if (txt) txt.textContent = origText; else cpanelBtn.textContent = origText;
+                    cpanelBtn.disabled = false;
                 });
-            });
+            }
+
+            // 2. Check if the user clicked a Softaculous WP SSO Login Button
+            var wpSsoBtn = e.target.closest('.skyhshoso-wp-sso-btn');
+            if (wpSsoBtn) {
+                e.preventDefault();
+                var origSsoText = wpSsoBtn.textContent;
+                wpSsoBtn.textContent = 'Connecting...';
+                wpSsoBtn.disabled = true;
+
+                var wpHostingId = wpSsoBtn.getAttribute('data-hosting-id');
+                var wpNonce = wpSsoBtn.getAttribute('data-nonce') || config.dashboardNonce;
+                var insid = wpSsoBtn.getAttribute('data-insid') || '';
+
+                var fdWp = new FormData();
+                fdWp.append('action', 'skyhshoso_get_cpanel_section_url');
+                fdWp.append('hosting_id', wpHostingId);
+                fdWp.append('section', 'wordpress');
+                fdWp.append('nonce', wpNonce);
+                
+                if (insid) {
+                    fdWp.append('insid', insid);
+                }
+
+                fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fdWp) })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    wpSsoBtn.disabled = false;
+                    wpSsoBtn.textContent = origSsoText;
+                    if (d.success && d.data && d.data.url) {
+                        window.open(d.data.url, '_blank');
+                    } else {
+                        alert('Could not auto-login. Try logging in to cPanel directly.');
+                    }
+                })
+                .catch(function(err) {
+                    wpSsoBtn.disabled = false;
+                    wpSsoBtn.textContent = origSsoText;
+                    alert('Connection error.');
+                });
+            }
+
+            // 3. Check if the user clicked a Native WP Toolkit Direct SSO Login Button
+            var directSsoBtn = e.target.closest('.skyhshoso-wp-direct-sso-btn');
+            if (directSsoBtn) {
+                e.preventDefault();
+                var origDirectText = directSsoBtn.textContent;
+                directSsoBtn.textContent = 'Connecting...';
+                directSsoBtn.disabled = true;
+
+                var hId = directSsoBtn.getAttribute('data-hosting-id');
+                var sUrl = directSsoBtn.getAttribute('data-site-url');
+                var n = directSsoBtn.getAttribute('data-nonce') || config.dashboardNonce;
+
+                var fd = new FormData();
+                fd.append('action', 'skyhshoso_generate_wp_sso');
+                fd.append('hosting_id', hId);
+                fd.append('site_url', sUrl);
+                fd.append('nonce', n);
+
+                fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fd) })
+                .then(r => r.json())
+                .then(d => {
+                    directSsoBtn.disabled = false;
+                    directSsoBtn.textContent = origDirectText;
+                    if (d.success && d.data && d.data.url) {
+                        window.open(d.data.url, '_blank');
+                    } else {
+                        alert('SSO Failed: ' + (d.data ? d.data.message : 'Unknown error'));
+                    }
+                })
+                .catch(err => {
+                    directSsoBtn.disabled = false;
+                    directSsoBtn.textContent = origDirectText;
+                    alert('Connection error.');
+                });
+            }
+
+            // 4. Check if the user clicked the Change Domain Button
+            var changeDomainBtn = e.target.closest('.skyhshoso-wp-change-domain-btn');
+            if (changeDomainBtn) {
+                e.preventDefault();
+                
+                var newDomain = prompt("Enter the new domain name (e.g., mynewsite.com):\n\nWARNING: Ensure your DNS A-Record points to this server's IP address before proceeding, otherwise the site will go offline.");
+                if (!newDomain) return;
+
+                var origText = changeDomainBtn.textContent;
+                changeDomainBtn.textContent = 'Migrating...';
+                changeDomainBtn.disabled = true;
+
+                var cd_hId = changeDomainBtn.getAttribute('data-hosting-id');
+                var cd_oUrl = changeDomainBtn.getAttribute('data-old-url');
+                var cd_dRoot = changeDomainBtn.getAttribute('data-docroot');
+                var cd_n = changeDomainBtn.getAttribute('data-nonce') || config.dashboardNonce;
+
+                var fdCd = new FormData();
+                fdCd.append('action', 'skyhshoso_assign_custom_domain');
+                fdCd.append('hosting_id', cd_hId);
+                fdCd.append('new_domain', newDomain);
+                fdCd.append('old_url', cd_oUrl);
+                fdCd.append('doc_root', cd_dRoot);
+                fdCd.append('nonce', cd_n);
+
+                fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fdCd) })
+                .then(r => r.json())
+                .then(d => {
+                    if (d.success) {
+                        alert(d.data ? d.data.message : 'Domain updated successfully.');
+                        location.reload(); 
+                    } else {
+                        alert('Error: ' + (d.data ? d.data.message : 'Failed to update domain.'));
+                        changeDomainBtn.textContent = origText;
+                        changeDomainBtn.disabled = false;
+                    }
+                })
+                .catch(err => {
+                    alert('An error occurred during domain assignment.');
+                    changeDomainBtn.textContent = origText;
+                    changeDomainBtn.disabled = false;
+                });
+            }
         });
     }
 
@@ -569,277 +690,7 @@
     }
 
     function initCpanelDashboard() {
-        var containers = document.querySelectorAll('[id^="skyhshoso-cpanel-manage-"]');
-        containers.forEach(function(el) {
-            var hostingId = el.getAttribute('data-hosting-id');
-            var nonce = el.getAttribute('data-nonce');
-            
-            el.innerHTML = '<div style="padding:30px;text-align:center;color:#60768a;"><div class="skyhshoso-spinner"></div><p style="margin-top:12px;">Loading cPanel data...</p></div>';
-
-            fetchManageData(hostingId, nonce, function(data) {
-                renderManageDashboard(el, hostingId, nonce, data);
-                attachManageDashboardListeners(el, hostingId, nonce);
-            });
-        });
-    }
-
-    function attachManageDashboardListeners(el, hostingId, nonce) {
-        // Password Reset Trigger
-        var passBtn = el.querySelector('#skyhshoso-trigger-pass-reset');
-        var modal = el.querySelector('#skyhshoso-pass-modal');
-        if (passBtn && modal) {
-            passBtn.addEventListener('click', function() { modal.style.display = 'flex'; });
-            el.querySelector('#skyhshoso-cancel-pass').addEventListener('click', function() { modal.style.display = 'none'; });
-            el.querySelector('#skyhshoso-save-pass').addEventListener('click', function() {
-                var newPass = el.querySelector('#skyhs-new-pass').value;
-                
-                var fd = new FormData();
-                fd.append('action', 'skyhshoso_reset_password');
-                fd.append('hosting_id', hostingId);
-                fd.append('new_password', newPass);
-                fd.append('nonce', nonce);
-
-                fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fd) })
-                .then(r => r.json())
-                .then(d => {
-                    alert(d.data.message);
-                    modal.style.display = 'none';
-                });
-            });
-        }
-
-        // SSH Toggle Trigger
-        var sshToggle = el.querySelector('#skyhshoso-ssh-toggle');
-        if (sshToggle) {
-            sshToggle.addEventListener('change', function() {
-                var state = this.checked ? 'enable' : 'disable';
-                
-                var fd = new FormData();
-                fd.append('action', 'skyhshoso_toggle_ssh');
-                fd.append('hosting_id', hostingId);
-                fd.append('action_state', state);
-                fd.append('nonce', nonce);
-
-                fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fd) })
-                .then(r => r.json())
-                .then(d => { alert(d.data.message); });
-            });
-        }
-
-        // Assign Custom Domain Trigger
-        var assignDomainBtn = el.querySelector('#skyhshoso-assign-domain-btn');
-        if (assignDomainBtn) {
-            assignDomainBtn.onclick = function() {
-                var newDomain = prompt("Enter your custom domain (e.g., mywebsite.com):");
-                if (!newDomain) return;
-
-                var origText = this.textContent;
-                this.textContent = 'Assigning & Migrating... Please wait.';
-                this.disabled = true;
-
-                var fd = new FormData();
-                fd.append('action', 'skyhshoso_assign_custom_domain');
-                fd.append('hosting_id', hostingId);
-                fd.append('new_domain', newDomain);
-                fd.append('nonce', nonce);
-
-                fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fd) })
-                .then(r => r.json())
-                .then(d => {
-                    alert(d.data ? d.data.message : 'Complete');
-                    location.reload(); 
-                })
-                .catch(err => {
-                    alert('An error occurred during domain assignment.');
-                    this.textContent = origText;
-                    this.disabled = false;
-                });
-            };
-        }
-    }
-
-    function fetchManageData(hostingId, nonce, callback) {
-        var fd = new FormData();
-        fd.append('action', 'skyhshoso_get_cpanel_stats');
-        fd.append('hosting_id', hostingId);
-        fd.append('nonce', nonce);
-        fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fd) })
-        .then(function(r) { return r.json(); })
-        .then(function(d) { if (d.success && callback) callback(d.data); })
-        .catch(function() {
-            var el = document.getElementById('skyhshoso-cpanel-manage-' + hostingId);
-            if (el) el.innerHTML = '<div style="padding:30px;text-align:center;color:#d63638;">Failed to load cPanel data.</div>';
-        });
-    }
-
-    function renderManageDashboard(el, hostingId, nonce, data) {
-        var stats = data.stats || {};
-        var usage = data.usage || {};
-        var wpSites = stats.wordpress_sites || [];
-
-        var diskPct = 0, bwPct = 0;
-        if (usage && usage.disk_limit > 0) diskPct = Math.round((usage.disk_used / usage.disk_limit) * 100);
-        if (usage && usage.bandwidth_limit > 0) bwPct = Math.round((usage.bandwidth_used / usage.bandwidth_limit) * 100);
-
-        var html = '';
-
-        // Resource usage bars
-        html += '<div style="margin-top:20px;padding-top:20px;border-top:1px solid #e5e5e5;">';
-        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;"><h3 style="font-size:18px;font-weight:700;margin:0;color:#111518;">Hosting Dashboard</h3><button class="skyhshoso-manage-refresh skyhshoso-cpanel-refresh-btn" data-hosting-id="' + hostingId + '" data-nonce="' + nonce + '" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">↻ Refresh Data</button></div>';
-
-        html += '<div class="skyhshoso-usage-grid">';
-        html += '<div class="skyhshoso-usage-item"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px;"><span style="font-weight:600;color:#111518;">Disk Usage</span><span style="color:#60768a;">' + formatBytes(usage.disk_used) + ' / ' + formatBytes(usage.disk_limit) + ' (' + diskPct + '%)</span></div><div style="background:#f0f0f1;border-radius:6px;height:24px;overflow:hidden;"><div style="background:' + (diskPct > 90 ? '#d63638' : '#2271b1') + ';width:' + Math.min(diskPct, 100) + '%;height:100%;border-radius:6px;transition:width 0.3s;"></div></div></div>';
-        html += '<div class="skyhshoso-usage-item"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px;"><span style="font-weight:600;color:#111518;">Bandwidth</span><span style="color:#60768a;">' + formatBytes(usage.bandwidth_used) + ' / ' + formatBytes(usage.bandwidth_limit) + ' (' + bwPct + '%)</span></div><div style="background:#f0f0f1;border-radius:6px;height:24px;overflow:hidden;"><div style="background:' + (bwPct > 90 ? '#d63638' : '#2271b1') + ';width:' + Math.min(bwPct, 100) + '%;height:100%;border-radius:6px;transition:width 0.3s;"></div></div></div>';
-        html += '</div>';
-
-        // Quick stats bar
-        html += '<div class="skyhshoso-quick-stats" style="display:flex;gap:20px;margin:20px 0;padding:16px 20px;background:#f9fafb;border-radius:12px;">';
-        html += '<div><span style="font-size:20px;font-weight:700;color:#111518;">' + (stats.email_accounts ? stats.email_accounts.length : 0) + '</span><span style="display:block;font-size:12px;color:#60768a;">Email Accounts</span></div>';
-        html += '<div><span style="font-size:20px;font-weight:700;color:#111518;">' + wpSites.length + '</span><span style="display:block;font-size:12px;color:#60768a;">WordPress</span></div>';
-        html += '<div><span style="font-size:20px;font-weight:700;color:#111518;">' + (stats.subdomains ? stats.subdomains.length : 0) + '</span><span style="display:block;font-size:12px;color:#60768a;">Subdomains</span></div>';
-        html += '<div><span style="font-size:20px;font-weight:700;color:#111518;">' + ((stats.addon_domains ? stats.addon_domains.length : 0) + (stats.parked_domains ? stats.parked_domains.length : 0)) + '</span><span style="display:block;font-size:12px;color:#60768a;">Addon/Parked</span></div>';
-        html += '</div>';
-
-        // WHMCS-style icon cards
-        html += '<div class="skyhshoso-cpanel-cards">';
-        var cards = [
-            { icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>', label: 'Email Accounts', section: 'email', desc: 'View and manage email accounts' },
-            { icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>', label: 'WordPress', section: 'wordpress', desc: 'WordPress installations via Softaculous' },
-            { icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>', label: 'File Manager', section: 'filemanager', desc: 'Browse and manage files' },
-            { icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.58 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.58 4 8 4s8-1.79 8-4M4 7c0-2.21 3.58-4 8-4s8 1.79 8 4m0 5c0 2.21-3.58 4-8 4s-8-1.79-8-4" /></svg>', label: 'Databases', section: 'databases', desc: 'MySQL databases and users' },
-            { icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>', label: 'SSL/TLS', section: 'ssl', desc: 'SSL certificates and security' },
-            { icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" /></svg>', label: 'Domains', section: 'domains', desc: 'Manage domains and subdomains' },
-            { icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>', label: 'DNS Editor', section: 'dns', desc: 'Manage DNS zone records' },
-            { icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>', label: 'FTP Accounts', section: 'ftp', desc: 'FTP access management' },
-        ];
-        cards.forEach(function(card) {
-            html += '<div class="skyhshoso-cpanel-card" data-section="' + card.section + '" data-hosting-id="' + hostingId + '" data-nonce="' + nonce + '">';
-            html += '<div class="skyhshoso-cpanel-card-icon">' + card.icon + '</div>';
-            html += '<div class="skyhshoso-cpanel-card-label">' + card.label + '</div>';
-            html += '<div class="skyhshoso-cpanel-card-desc">' + card.desc + '</div>';
-            html += '</div>';
-        });
-        html += '</div>';
-
-        // WordPress sites
-        if (wpSites.length > 0) {
-            html += '<div style="margin-top:24px;"><h4 style="font-size:15px;font-weight:600;margin:0 0 12px 0;color:#111518;">WordPress Installations</h4><div class="skyhshoso-wp-list">';
-            wpSites.forEach(function(site) {
-                var btnHtml = '';
-                if (site.insid) {
-                    btnHtml = '<button class="skyhshoso-wp-admin-btn skyhshoso-wp-sso-btn" data-hosting-id="' + hostingId + '" data-nonce="' + nonce + '" data-insid="' + escapeHtml(site.insid) + '" style="border:none;cursor:pointer;">Log in</button>';
-                } else {
-                    btnHtml = '<a href="' + escapeHtml(site.admin_url) + '" target="_blank" class="skyhshoso-wp-admin-btn" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;">Log in</a>';
-                }
-                html += '<div class="skyhshoso-wp-item">' +
-                        '<a href="' + escapeHtml(site.site_url) + '" target="_blank" style="font-weight:600;color:#2271b1;text-decoration:none;">' + escapeHtml(site.site_url) + '</a>' +
-                        '<div style="display:flex;gap:8px;">' +
-                        btnHtml +
-                        '</div>' +
-                        '</div>';
-            });
-            html += '</div></div>';
-        }
-
-        html += '</div>';
-        el.innerHTML = html;
-
-        // Wire up refresh button
-        var refreshBtn = el.querySelector('.skyhshoso-manage-refresh');
-        if (refreshBtn) {
-            refreshBtn.addEventListener('click', function() {
-                refreshBtn.textContent = '↻ Refreshing...';
-                refreshBtn.disabled = true;
-                el.innerHTML = '<div style="padding:30px;text-align:center;color:#60768a;"><div class="skyhshoso-spinner"></div><p style="margin-top:12px;">Refreshing data...</p></div>';
-                var fd = new FormData();
-                fd.append('action', 'skyhshoso_refresh_cpanel_stats');
-                fd.append('hosting_id', hostingId);
-                fd.append('nonce', nonce);
-                fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fd) })
-                .then(function(r) { return r.json(); })
-                .then(function(d) {
-                    if (d.success) renderManageDashboard(el, hostingId, nonce, d.data);
-                    else el.innerHTML = '<div style="padding:30px;text-align:center;color:#d63638;">Refresh failed.</div>';
-                })
-                .catch(function() { el.innerHTML = '<div style="padding:30px;text-align:center;color:#d63638;">Connection error.</div>'; });
-            });
-        }
-
-        // Wire up card clicks for cPanel deep links
-        el.querySelectorAll('.skyhshoso-cpanel-card').forEach(function(card) {
-            card.addEventListener('click', function() {
-                var section = card.getAttribute('data-section');
-                var hId = card.getAttribute('data-hosting-id');
-                var n = card.getAttribute('data-nonce');
-                var iconContainer = card.querySelector('.skyhshoso-cpanel-card-icon');
-                var origHtml = iconContainer.innerHTML;
-
-                card.classList.add('skyhshoso-cpanel-card-loading');
-                iconContainer.innerHTML = '<svg class="skyhshoso-spinner-svg" viewBox="0 0 50 50" style="width:24px;height:24px;animation:skyhshoso-spin 1s linear infinite;"><circle cx="25" cy="25" r="20" fill="none" stroke-width="5" stroke="#2563eb" stroke-linecap="round"></circle></svg>';
-
-                var fd = new FormData();
-                fd.append('action', 'skyhshoso_get_cpanel_section_url');
-                fd.append('hosting_id', hId);
-                fd.append('section', section);
-                fd.append('nonce', n);
-
-                fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fd) })
-                .then(function(r) { return r.json(); })
-                .then(function(d) {
-                    card.classList.remove('skyhshoso-cpanel-card-loading');
-                    iconContainer.innerHTML = origHtml;
-                    if (d.success && d.data && d.data.url) {
-                        window.open(d.data.url, '_blank');
-                    } else {
-                        alert('Could not open this section. Try logging in to cPanel directly.');
-                    }
-                })
-                .catch(function(err) {
-                    card.classList.remove('skyhshoso-cpanel-card-loading');
-                    iconContainer.innerHTML = origHtml;
-                    alert('Connection error.');
-                });
-            });
-        });
-
-        // Wire up WP SSO button clicks
-        el.querySelectorAll('.skyhshoso-wp-sso-btn').forEach(function(btn) {
-            btn.addEventListener('click', function() {
-                var hId = btn.getAttribute('data-hosting-id');
-                var n = btn.getAttribute('data-nonce');
-                var insid = btn.getAttribute('data-insid') || '';
-                var origText = btn.textContent;
-
-                btn.disabled = true;
-                btn.textContent = 'Connecting...';
-
-                var fd = new FormData();
-                fd.append('action', 'skyhshoso_get_cpanel_section_url');
-                fd.append('hosting_id', hId);
-                fd.append('section', 'wordpress');
-                fd.append('nonce', n);
-                if (insid) {
-                    fd.append('insid', insid);
-                }
-
-                fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fd) })
-                .then(function(r) { return r.json(); })
-                .then(function(d) {
-                    btn.disabled = false;
-                    btn.textContent = origText;
-                    if (d.success && d.data && d.data.url) {
-                        window.open(d.data.url, '_blank');
-                    } else {
-                        alert('Could not auto-login. Try logging in to cPanel directly.');
-                    }
-                })
-                .catch(function(err) {
-                    btn.disabled = false;
-                    btn.textContent = origText;
-                    alert('Connection error.');
-                });
-            });
-        });
+        // Redundant due to removal of nested WP management view, but kept to not break anything.
     }
 
     function formatBytes(bytes) {
@@ -1061,6 +912,7 @@
         initCpanelDashboard();
         initWpSiteProvision();
         initWpPasswordToggle();
+        
         setupPagination({
             paginationContainerId: 'skyhshoso-hosting-pagination',
             tbodyId: 'skyhshoso-hosting-tbody',
@@ -1084,9 +936,11 @@
                 paginationContainerId: 'skyhshoso-wp-site-pagination',
                 tbodyId: 'skyhshoso-wp-site-tbody',
                 tableId: 'skyhshoso-wp-site-table',
-                ajaxAction: 'skyhshoso_get_wp_site_page'
+                ajaxAction: 'skyhshoso_get_wp_site_page',
+                autoFetch: true
             });
         }
+        
         initPeriodToggle();
         initAddDomainForm();
     }

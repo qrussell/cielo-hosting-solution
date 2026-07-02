@@ -13,13 +13,11 @@ class SkyHSHOSO_WHM_API {
     public function call($endpoint, $params = []) {
         $query = http_build_query($params);
 
-        // Normalize host: remove protocols (http/https) and trailing slashes
         $clean_host = preg_replace('#^https?://#i', '', trim($this->host));
         $clean_host = rtrim($clean_host, '/');
 
         $url = "https://{$clean_host}:2087/json-api/{$endpoint}?{$query}";
 
-        // Enforce SSL verification unless explicitly disabled via Test Mode
         $ssl_verify = true;
         if ( class_exists( 'SkyHSHOSO_Settings' ) && SkyHSHOSO_Settings::is_test_mode() ) {
             $ssl_verify = false;
@@ -64,19 +62,16 @@ class SkyHSHOSO_WHM_API {
         $server_id = get_post_meta($hosting_id, 'skyhshoso_server_id', true);
         $plan = get_post_meta($hosting_id, 'skyhshoso_hosting_plan', true);
         
-        // FIX: Fetch email directly from the post author instead of session
         $author_id = get_post_field('post_author', $hosting_id);
         $author = get_userdata($author_id);
         $user_email = $author ? $author->user_email : '';
 
-        // Use pre-generated username if it exists, otherwise generate fallback
         $username = get_post_meta($hosting_id, 'skyhshoso_hosting_username', true);
         if (empty($username)) {
             $username = substr(preg_replace('/[^a-z0-9]/', '', strtolower($domain)), 0, 8) . substr(md5(time()), 0, 8);
             update_post_meta($hosting_id, 'skyhshoso_hosting_username', $username);
         }
 
-        // Use pre-generated password if it exists, otherwise generate fallback
         $password = get_post_meta($hosting_id, '_skyhshoso_hosting_temp_password', true);
         if (empty($password)) {
             $password = wp_generate_password(16, true, true);
@@ -100,7 +95,6 @@ class SkyHSHOSO_WHM_API {
         if (isset($result['metadata']['reason']) && $result['metadata']['reason'] == 'OK') {
             return true;
         } else {
-            // Provide explicit error fallback
             $error_message = isset($result['metadata']['reason']) ? $result['metadata']['reason'] : (isset($result['metadata']['result']) ? wp_json_encode($result['metadata']) : 'Unknown WHM API error');
             if (class_exists('SkyHSHOSO_Logger')) {
                 SkyHSHOSO_Logger::error( 'WHM account creation failed for hosting #' . $hosting_id . ' (Domain: ' . $domain . '): ' . $error_message, array( 'source' => 'whm_integration' ) );
@@ -176,110 +170,10 @@ class SkyHSHOSO_WHM_API {
         return json_decode( $body, true );
     }
 
-    public function cpanel_api_v2_raw($cpanel_user, $module, $function, $params = []) {
-        $params['cpanel_jsonapi_module']      = $module;
-        $params['cpanel_jsonapi_func']        = $function;
-        $params['cpanel_jsonapi_apiversion'] = 2;
-        $params['cpanel_jsonapi_user']        = $cpanel_user;
-
-        $clean_host = preg_replace('#^https?://#i', '', trim($this->host));
-        $clean_host = rtrim($clean_host, '/');
-
-        $url = "https://{$clean_host}:2087/json-api/cpanel?" . http_build_query($params);
-
-        $ssl_verify = true;
-        if ( class_exists( 'SkyHSHOSO_Settings' ) && SkyHSHOSO_Settings::is_test_mode() ) {
-            $ssl_verify = false;
-        }
-
-        $args = [
-            'headers' => [
-                'Authorization' => "whm {$this->username}:{$this->token}"
-            ],
-            'sslverify' => $ssl_verify,
-            'timeout'   => 30,
-        ];
-
-        $response = wp_remote_get( $url, $args );
-
-        if ( is_wp_error( $response ) ) {
-            return false;
-        }
-
-        $body = wp_remote_retrieve_body( $response );
-        return json_decode( $body, true );
-    }
-
-    public function get_softaculous_installations( $cpanel_user ) {
-        $file_data = $this->cpanel_uapi_call_v3( $cpanel_user, 'Fileman', 'get_file_content', [
-            'dir'  => "/home/{$cpanel_user}/.softaculous",
-            'file' => 'installations.php',
-        ]);
-
-        if ( empty( $file_data['content'] ) ) {
-            return false;
-        }
-
-        $content = $file_data['content'];
-        
-        if ( preg_match( '/unserialize\s*\(\s*[\'"](.*?)[\'"]\s*\)/s', $content, $matches ) ) {
-            $serialized_str = $matches[1];
-            $serialized_str = str_replace( array( "\\'", "\\\\" ), array( "'", "\\" ), $serialized_str );
-            $data = @unserialize( $serialized_str );
-            if ( is_array( $data ) ) {
-                return $data;
-            }
-        }
-        return false;
-    }
-
-    public function cpanel_uapi_call($cpanel_user, $module, $function, $params = []) {
-        $params['cpanel_jsonapi_module']      = $module;
-        $params['cpanel_jsonapi_func']        = $function;
-        $params['cpanel_jsonapi_apiversion'] = 2;
-        $params['cpanel_jsonapi_user']        = $cpanel_user;
-
-        $clean_host = preg_replace('#^https?://#i', '', trim($this->host));
-        $clean_host = rtrim($clean_host, '/');
-
-        $url = "https://{$clean_host}:2087/json-api/cpanel?" . http_build_query($params);
-
-        $ssl_verify = true;
-        if ( class_exists( 'SkyHSHOSO_Settings' ) && SkyHSHOSO_Settings::is_test_mode() ) {
-            $ssl_verify = false;
-        }
-
-        $args = [
-            'headers' => [
-                'Authorization' => "whm {$this->username}:{$this->token}"
-            ],
-            'sslverify' => $ssl_verify,
-            'timeout'   => 30,
-        ];
-
-        $response = wp_remote_get( $url, $args );
-
-        if ( is_wp_error( $response ) ) {
-            return false;
-        }
-
-        $body = wp_remote_retrieve_body( $response );
-        $data = json_decode( $body, true );
-
-        $result_data = $data['cpanelresult']['data'] ?? null;
-
-        if ( $result_data === null || ( is_array( $result_data ) && isset( $result_data['result'] ) && $result_data['result'] == 0 ) ) {
-            return false;
-        }
-
-        return $result_data;
-    }
-
     public function get_email_accounts($cpanel_user) {
-        $data = $this->cpanel_uapi_call($cpanel_user, 'Email', 'listpopswithdisk');
-        if ( empty( $data ) ) {
-            return [];
-        }
+        $data = $this->cpanel_uapi_call_v3($cpanel_user, 'Email', 'list_pops_with_disk');
+        if ( empty( $data ) ) return [];
+        
         $accounts = [];
         foreach ( $data as $acct ) {
             $accounts[] = [
@@ -293,10 +187,9 @@ class SkyHSHOSO_WHM_API {
     }
 
     public function get_subdomains($cpanel_user) {
-        $data = $this->cpanel_uapi_call($cpanel_user, 'SubDomain', 'listsubdomains');
-        if ( empty( $data ) ) {
-            return [];
-        }
+        $data = $this->cpanel_uapi_call_v3($cpanel_user, 'SubDomain', 'listsubdomains');
+        if ( empty( $data ) ) return [];
+        
         $subs = [];
         foreach ( $data as $sub ) {
             $subs[] = [
@@ -308,10 +201,9 @@ class SkyHSHOSO_WHM_API {
     }
 
     public function get_addon_domains($cpanel_user) {
-        $data = $this->cpanel_uapi_call($cpanel_user, 'AddonDomain', 'listaddondomains');
-        if ( empty( $data ) ) {
-            return [];
-        }
+        $data = $this->cpanel_uapi_call_v3($cpanel_user, 'AddonDomain', 'listaddondomains');
+        if ( empty( $data ) ) return [];
+        
         $addons = [];
         foreach ( $data as $ad ) {
             $addons[] = [
@@ -324,10 +216,9 @@ class SkyHSHOSO_WHM_API {
     }
 
     public function get_parked_domains($cpanel_user) {
-        $data = $this->cpanel_uapi_call($cpanel_user, 'Park', 'listparkeddomains');
-        if ( empty( $data ) ) {
-            return [];
-        }
+        $data = $this->cpanel_uapi_call_v3($cpanel_user, 'Park', 'listparkeddomains');
+        if ( empty( $data ) ) return [];
+        
         $parked = [];
         foreach ( $data as $pd ) {
             $parked[] = [
@@ -337,52 +228,79 @@ class SkyHSHOSO_WHM_API {
         return $parked;
     }
 
-    public function check_wordpress($cpanel_user, $domain) {
+    /**
+     * UNIVERSAL WORDPRESS SCANNER
+     * Now captures and returns the exact document root (folder path) for each site.
+     */
+    public function check_wordpress($cpanel_user, $domain, &$debug_info = null) {
+        if (!is_array($debug_info)) $debug_info = [];
         $wordpress_sites = [];
-        $subdomains = $this->get_subdomains($cpanel_user);
-
+        
         $dirs_to_check = [
-            ['dir' => "/home/{$cpanel_user}/public_html", 'url' => "https://{$domain}", 'depth' => 0],
+            'public_html' => "https://{$domain}"
         ];
 
-        foreach ( $subdomains as $sub ) {
-            $sub_domain = $sub['domain'] ?? '';
-            $doc_root   = $sub['root'] ?? '';
-            if ( $doc_root ) {
-                $dirs_to_check[] = ['dir' => $doc_root, 'url' => "https://{$sub_domain}", 'depth' => 0];
+        // Gather Subdomains
+        $subdomains = $this->get_subdomains($cpanel_user);
+        foreach ($subdomains as $sub) {
+            if (!empty($sub['root'])) {
+                $rel_path = preg_replace('#^/?home/' . preg_quote($cpanel_user, '#') . '/#', '', $sub['root']);
+                $dirs_to_check[trim($rel_path, '/')] = "https://{$sub['domain']}";
             }
         }
 
-        $softaculous_ins = $this->get_softaculous_installations($cpanel_user);
+        // Gather Addon Domains
+        $addons = $this->get_addon_domains($cpanel_user);
+        foreach ($addons as $addon) {
+            if (!empty($addon['root'])) {
+                $rel_path = preg_replace('#^/?home/' . preg_quote($cpanel_user, '#') . '/#', '', $addon['root']);
+                $dirs_to_check[trim($rel_path, '/')] = "https://{$addon['domain']}";
+            }
+        }
+
+        $debug_info[] = "Scanning mapped directories: " . json_encode($dirs_to_check);
+
+        // Gather Softaculous info for Native Softaculous Auto-Login
+        $softaculous_ins = false;
+        $file_data = $this->cpanel_uapi_call_v3_raw( $cpanel_user, 'Fileman', 'get_file_content', [
+            'dir'  => '.softaculous',
+            'file' => 'installations.php',
+        ]);
+        
+        if ( isset($file_data['result']['data']['content']) ) {
+            $content = $file_data['result']['data']['content'];
+            if ( preg_match( '/unserialize\s*\(\s*[\'"](.*?)[\'"]\s*\)/s', $content, $matches ) ) {
+                $serialized_str = str_replace( array( "\\'", "\\\\" ), array( "'", "\\" ), $matches[1] );
+                $softaculous_ins = @unserialize( $serialized_str );
+            }
+        }
+        
         $wp_installations = [];
         if ( isset($softaculous_ins[26]) && is_array($softaculous_ins[26]) ) {
             $wp_installations = $softaculous_ins[26];
         }
 
-        foreach ( $dirs_to_check as $check ) {
-            $data = $this->cpanel_uapi_call($cpanel_user, 'Fileman', 'listfiles', [
-                'dir'        => $check['dir'],
-                'showhidden' => 1,
+        // Scan mapped directories
+        foreach ( $dirs_to_check as $dir => $url ) {
+            if (empty($dir)) continue;
+
+            $file_check = $this->cpanel_uapi_call_v3_raw($cpanel_user, 'Fileman', 'get_file_information', [
+                'path' => $dir . '/wp-config.php'
             ]);
 
-            if ( empty( $data ) ) continue;
+            $debug_info[] = "Checking [{$dir}/wp-config.php] -> Response: " . json_encode($file_check);
 
-            $subdirs = [];
-            $has_wp = false;
-            foreach ( $data as $entry ) {
-                $name = $entry['file'] ?? $entry['name'] ?? '';
-                $type = $entry['type'] ?? '';
-                if ( $name === 'wp-config.php' || ( $name === 'wp-includes' && $type === 'dir' ) ) {
-                    $has_wp = true;
-                }
-                if ( $type === 'dir' && ! in_array( $name, ['.', '..', 'cgi-bin'] ) && strpos( $name, '.' ) !== 0 ) {
-                    $subdirs[] = $name;
-                }
+            $is_wp = false;
+            if (isset($file_check['result']['data'][0]['type']) && $file_check['result']['data'][0]['type'] === 'file') {
+                $is_wp = true;
+            } elseif (isset($file_check['result']['data']['type']) && $file_check['result']['data']['type'] === 'file') {
+                $is_wp = true;
             }
 
-            if ( $has_wp ) {
+            if ( $is_wp ) {
                 $insid = '';
-                $norm_check_url = rtrim( preg_replace( '#^https?://(www\.)?#i', '', $check['url'] ), '/' );
+                $norm_check_url = rtrim( preg_replace( '#^https?://(www\.)?#i', '', $url ), '/' );
+                
                 foreach ( $wp_installations as $inst ) {
                     $inst_url = $inst['softurl'] ?? $inst['url'] ?? '';
                     if ( $inst_url ) {
@@ -395,26 +313,31 @@ class SkyHSHOSO_WHM_API {
                 }
 
                 $wordpress_sites[] = [
-                    'site_url'  => $check['url'],
-                    'admin_url' => $check['url'] . '/wp-admin',
+                    'site_url'  => $url,
+                    'admin_url' => rtrim($url, '/') . '/wp-admin/',
                     'insid'     => $insid,
+                    'doc_root'  => "/home/{$cpanel_user}/" . trim($dir, '/')
                 ];
-            }
+            } else {
+                // Check common subdirectories for nested WP Toolkit installs
+                $common_subs = ['wp', 'wordpress', 'site', 'blog'];
+                foreach ($common_subs as $sub) {
+                    $sub_check = $this->cpanel_uapi_call_v3_raw($cpanel_user, 'Fileman', 'get_file_information', [
+                        'path' => $dir . '/' . $sub . '/wp-config.php'
+                    ]);
+                    
+                    $is_sub_wp = false;
+                    if (isset($sub_check['result']['data'][0]['type']) && $sub_check['result']['data'][0]['type'] === 'file') {
+                        $is_sub_wp = true;
+                    } elseif (isset($sub_check['result']['data']['type']) && $sub_check['result']['data']['type'] === 'file') {
+                        $is_sub_wp = true;
+                    }
 
-            foreach ( $subdirs as $subdir ) {
-                $sub_data = $this->cpanel_uapi_call($cpanel_user, 'Fileman', 'listfiles', [
-                    'dir'        => $check['dir'] . '/' . $subdir,
-                    'showhidden' => 1,
-                ]);
-                if ( empty( $sub_data ) ) continue;
-
-                foreach ( $sub_data as $entry ) {
-                    $name = $entry['file'] ?? $entry['name'] ?? '';
-                    $type = $entry['type'] ?? '';
-                    if ( $name === 'wp-config.php' || ( $name === 'wp-includes' && $type === 'dir' ) ) {
-                        $site_url = $check['url'] . '/' . $subdir;
+                    if ($is_sub_wp) {
+                        $site_url = rtrim($url, '/') . '/' . $sub;
                         $insid = '';
                         $norm_site_url = rtrim( preg_replace( '#^https?://(www\.)?#i', '', $site_url ), '/' );
+                        
                         foreach ( $wp_installations as $inst ) {
                             $inst_url = $inst['softurl'] ?? $inst['url'] ?? '';
                             if ( $inst_url ) {
@@ -428,8 +351,9 @@ class SkyHSHOSO_WHM_API {
 
                         $wordpress_sites[] = [
                             'site_url'  => $site_url,
-                            'admin_url' => $site_url . '/wp-admin',
+                            'admin_url' => rtrim($site_url, '/') . '/wp-admin/',
                             'insid'     => $insid,
+                            'doc_root'  => "/home/{$cpanel_user}/" . trim($dir, '/') . '/' . $sub
                         ];
                         break;
                     }
@@ -440,13 +364,66 @@ class SkyHSHOSO_WHM_API {
         return $wordpress_sites;
     }
 
-    public function get_all_account_stats($hosting_id, $cpanel_user, $domain) {
-        $cache_key = 'skyhshoso_cpanel_stats_' . $hosting_id;
-        $cached = get_transient( $cache_key );
-        if ( false !== $cached ) {
-            return $cached;
+    public function inject_wp_sso_script($cpanel_user, $site_url, $admin_username = '') {
+        $parsed = wp_parse_url($site_url);
+        $host = $parsed['host'] ?? '';
+        $path = $parsed['path'] ?? '';
+        $host = preg_replace('#^www\.#i', '', $host);
+
+        $doc_root = "/home/{$cpanel_user}/public_html"; 
+        
+        $subdomains = $this->get_subdomains($cpanel_user);
+        foreach ($subdomains as $sub) {
+            if ($sub['domain'] === $host && !empty($sub['root'])) $doc_root = $sub['root'];
+        }
+        $addons = $this->get_addon_domains($cpanel_user);
+        foreach ($addons as $addon) {
+            if ($addon['domain'] === $host && !empty($addon['root'])) $doc_root = $addon['root'];
+        }
+        
+        if (!empty($path) && $path !== '/') {
+            $doc_root = rtrim($doc_root, '/') . '/' . trim($path, '/');
+        }
+        
+        $rel_path = preg_replace('#^/?home/' . preg_quote($cpanel_user, '#') . '/#', '', $doc_root);
+
+        $token = wp_generate_password(40, false);
+        $filename = "skyhs_sso_{$token}.php";
+
+        $php_code = "<?php\n";
+        $php_code .= "define('WP_USE_THEMES', false);\n";
+        $php_code .= "require('./wp-load.php');\n";
+        $php_code .= "\$target_user = '" . addslashes($admin_username) . "';\n";
+        $php_code .= "\$user = get_user_by('login', \$target_user);\n";
+        $php_code .= "if (!\$user) {\n";
+        $php_code .= "    \$users = get_users(['role' => 'administrator']);\n";
+        $php_code .= "    if (!empty(\$users)) \$user = \$users[0];\n";
+        $php_code .= "}\n";
+        $php_code .= "if (\$user) {\n";
+        $php_code .= "    wp_clear_auth_cookie();\n";
+        $php_code .= "    wp_set_current_user(\$user->ID);\n";
+        $php_code .= "    wp_set_auth_cookie(\$user->ID);\n";
+        $php_code .= "    @unlink(__FILE__);\n";
+        $php_code .= "    wp_safe_redirect(admin_url());\n";
+        $php_code .= "    exit;\n";
+        $php_code .= "}\n";
+        $php_code .= "@unlink(__FILE__);\n";
+        $php_code .= "die('SSO Failed: No administrator accounts could be found to log into.');\n";
+
+        $result = $this->cpanel_uapi_call_v3_raw($cpanel_user, 'Fileman', 'save_file_content', [
+            'dir' => trim($rel_path, '/'),
+            'file' => $filename,
+            'content' => $php_code
+        ]);
+
+        if (isset($result['result']['status']) && $result['result']['status']) {
+            return rtrim($site_url, '/') . '/' . $filename;
         }
 
+        return false;
+    }
+
+    public function get_all_account_stats($hosting_id, $cpanel_user, $domain) {
         $stats = [
             'email_accounts' => $this->get_email_accounts( $cpanel_user ),
             'subdomains'     => $this->get_subdomains( $cpanel_user ),
@@ -454,8 +431,6 @@ class SkyHSHOSO_WHM_API {
             'parked_domains' => $this->get_parked_domains( $cpanel_user ),
             'wordpress_sites' => $this->check_wordpress( $cpanel_user, $domain ),
         ];
-
-        set_transient( $cache_key, $stats, DAY_IN_SECONDS );
         return $stats;
     }
 
