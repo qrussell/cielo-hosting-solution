@@ -22,7 +22,7 @@ add_action('wp_ajax_skyhshoso_wp_sso_login', 'skyhshoso_generate_wp_sso'); // Al
 add_action('wp_ajax_skyhshoso_change_wp_domain', 'skyhshoso_assign_custom_domain'); // Aliased to use the robust payload injector
 /**
  * =========================================================================
- * PROVISION DOMAIN ONLY (WITH STRICT DOCUMENT ROOT ISOLATION)
+ * PROVISION DOMAIN ONLY (APPLICATION CONTAINER ARCHITECTURE)
  * =========================================================================
  */
 add_action('wp_ajax_skyhshoso_wp_provision', 'skyhshoso_wp_provision_callback');
@@ -44,6 +44,21 @@ function skyhshoso_wp_provision_callback() {
     $server_id = get_post_meta($hosting_id, 'skyhshoso_server_id', true);
     $username  = get_post_meta($hosting_id, 'skyhshoso_hosting_username', true);
     $primary_domain = get_post_meta($hosting_id, 'skyhshoso_hosting_domain', true);
+
+    // --- SMART SUBDOMAIN VALIDATION (Global Settings) ---
+    $options = get_option('skyhshoso_settings_group', []);
+    $base_domains_raw = $options['wp_base_domains'] ?? '';
+    $base_domains = array_filter(preg_split('/[\s,]+/', $base_domains_raw));
+
+    if (empty($base_domains)) {
+        $is_admin = current_user_can('administrator') || current_user_can('manage_options');
+        if ($is_admin) {
+            wp_send_json_error(['message' => 'Admin Action Required: Please configure the WP Base Domains in the Plugin General Settings.']);
+        } else {
+            wp_send_json_error(['message' => 'System configuration is finalizing. Nothing is wrong with your account, but we cannot create the site just yet. Please try again shortly!']);
+        }
+    }
+    // ----------------------------------------------------
     
     $whm_api_user  = get_post_meta($server_id, '_skyhshoso_whm_user_id', true);
     $whm_api_token = get_post_meta($server_id, '_skyhshoso_whm_token', true);
@@ -56,12 +71,18 @@ function skyhshoso_wp_provision_callback() {
     $clean_primary = str_replace(['www.', 'https://', 'http://'], '', rtrim($primary_domain, '/'));
 
     // 1. Determine Document Root & Create Domain
-    $doc_root = 'public_html'; // The Primary domain stays safely in public_html
+    $doc_root = 'public_html'; // Primary domain stays in public_html
     
     if ($clean_domain !== $clean_primary) {
-        // THE FIX: Set doc root outside public_html to prevent URL bleeding!
-        // This places the files at /home/username/newsite.com/ securely.
-        $doc_root = $clean_domain;
+        // THE FIX: "Application Container" Architecture
+        // Extract the prefix (e.g. 'wp931' from 'wp931.cielocloud.dev')
+        $domain_parts = explode('.', $clean_domain);
+        $app_name = preg_replace('/[^a-zA-Z0-9]/', '', $domain_parts[0]);
+        if (empty($app_name)) $app_name = 'wp';
+        
+        // Put the site in a dedicated "sites" folder outside public_html.
+        // We append a short random number to prevent folder name collisions.
+        $doc_root = 'sites/' . $app_name . '_' . rand(100, 999);
 
         $primary_tld_pattern = '/\.' . preg_quote($clean_primary, '/') . '$/i';
         
@@ -539,8 +560,6 @@ function skyhshoso_ajax_get_scan_targets() {
         }
     }
 
-    // THE FIX: Move the Primary Domain to the absolute END of the queue.
-    // This allows Addon Domains to "claim" their folders first!
     $primary_domain_key = null;
     foreach ($domains_to_check as $key => $d) {
         if ($d['domain'] === $primary_domain) {
@@ -555,7 +574,7 @@ function skyhshoso_ajax_get_scan_targets() {
     }
 
     $targets = [];
-    $queued_doc_roots = []; // STRICT tracking array to prevent duplicate paths
+    $queued_doc_roots = []; 
 
     foreach ($domains_to_check as $d) {
         $domain = trim($d['domain']);
@@ -565,9 +584,7 @@ function skyhshoso_ajax_get_scan_targets() {
         $doc_root_base = trim($doc_root_base, '/');
         if (empty($doc_root_base)) $doc_root_base = 'public_html';
 
-        $dynamic_subs = ['']; // Always check the root of the domain
-
-        // Dynamically scan the document root for ALL existing subdirectories
+        $dynamic_subs = ['']; 
         $dir_list = $whm_api->cpanel_uapi_call_v3_raw($username, 'Fileman', 'list_files', [
             'dir' => $doc_root_base,
             'types' => 'dir'
@@ -577,10 +594,8 @@ function skyhshoso_ajax_get_scan_targets() {
             foreach ($dir_list['result']['data'] as $item) {
                 if (isset($item['type']) && $item['type'] === 'dir') {
                     $dirname = trim($item['file']);
-                    
                     if (strpos($dirname, '.') === 0) continue;
                     if (in_array(strtolower($dirname), ['cgi-bin', 'css', 'js', 'images', 'wp-admin', 'wp-includes', 'wp-content', 'vendor', 'node_modules'])) continue;
-                    
                     $dynamic_subs[] = '/' . $dirname;
                 }
             }
@@ -590,16 +605,13 @@ function skyhshoso_ajax_get_scan_targets() {
 
         $dynamic_subs = array_unique($dynamic_subs);
 
-        // Queue all discovered folders
         foreach ($dynamic_subs as $sub) {
-            $target_root = $doc_root_base . $sub;
+            // THE FIX: Strict formatting ensures the array blocks duplicates perfectly
+            $target_root = trim($doc_root_base . $sub, '/'); 
             
-            // THE FIX: If this exact folder was already claimed by an Addon domain, skip it entirely!
             if (isset($queued_doc_roots[$target_root])) {
                 continue;
             }
-            
-            // Claim this folder path
             $queued_doc_roots[$target_root] = true;
 
             $targets[] = [
@@ -747,30 +759,24 @@ function skyhshoso_assign_custom_domain() {
     }
     $whm_api = new SkyHSHOSO_WHM_API($whm_api_user, $whm_api_token, $whm_api_host);
 
-    // Calculate Relative Directory for Fileman
     $relative_dir = preg_replace('#^/?home/' . preg_quote($username, '#') . '/#', '', $doc_root);
     if (empty($relative_dir)) $relative_dir = 'public_html';
 
-    // ---------------------------------------------------------
-    // PRE-FLIGHT CHECK: Ensure WordPress is actually installed!
-    // ---------------------------------------------------------
+    // PRE-FLIGHT CHECK
     $file_check = $whm_api->cpanel_uapi_call_v3_raw($username, 'Fileman', 'get_file_information', [
         'path' => trim($relative_dir, '/') . '/wp-config.php'
     ]);
 
     if (!isset($file_check['result']['status']) || $file_check['result']['status'] != 1) {
-        wp_send_json_error(['message' => 'WordPress is not fully provisioned yet! Please click the "cPanel" button and use WP Toolkit or Installatron to finish installing WordPress before changing the domain.']);
+        wp_send_json_error(['message' => 'WordPress is not fully provisioned yet! Please click the "cPanel" button and finish installing WordPress before changing the domain.']);
     }
-    // ---------------------------------------------------------
 
-    // Is this the main domain being swapped entirely?
     $is_primary = ($relative_dir === 'public_html' && $old_domain === $current_primary_clean);
 
     // ---------------------------------------------------------
-    // PHASE 1: Server Infrastructure Domain Update
+    // PHASE 1: Server Infrastructure Domain Update & Cleanup
     // ---------------------------------------------------------
     if ($is_primary) {
-        // Change the main WHM account domain
         $whm_result = $whm_api->call('modifyacct', [
             'api.version' => 1,
             'user' => $username,
@@ -786,7 +792,6 @@ function skyhshoso_assign_custom_domain() {
     } else {
         $safe_subdomain_alias = substr(preg_replace('/[^a-zA-Z0-9]/', '', $new_domain), 0, 8) . rand(100,999);
 
-        // Create an Addon Domain pointing to the specific sub-folder where WP is located
         $create_res = $whm_api->call('cpanel', [
             'cpanel_jsonapi_user'       => $username,
             'cpanel_jsonapi_apiversion' => '2',
@@ -797,21 +802,34 @@ function skyhshoso_assign_custom_domain() {
             'subdomain'                 => $safe_subdomain_alias
         ]);
 
-        // Validate the API 2 Response
+        $success = false;
         if (isset($create_res['cpanelresult']['error'])) {
             $reason = $create_res['cpanelresult']['error'];
-            if (strpos(strtolower($reason), 'exists') === false && strpos(strtolower($reason), 'configured') === false) {
+            if (strpos(strtolower($reason), 'exists') !== false || strpos(strtolower($reason), 'configured') !== false) {
+                $success = true;
+            } else {
                  wp_send_json_error(['message' => 'cPanel could not create domain: ' . $reason]);
             }
-        } elseif (isset($create_res['cpanelresult']['data'][0]['result']) && $create_res['cpanelresult']['data'][0]['result'] == 0) {
-            $reason = $create_res['cpanelresult']['data'][0]['reason'];
-            if (strpos(strtolower($reason), 'exists') === false && strpos(strtolower($reason), 'configured') === false) {
-                 wp_send_json_error(['message' => 'cPanel could not create domain: ' . $reason]);
-            }
+        } elseif (isset($create_res['cpanelresult']['data'][0]['result'])) {
+             if ($create_res['cpanelresult']['data'][0]['result'] == 1) {
+                 $success = true;
+             } else {
+                 $reason = $create_res['cpanelresult']['data'][0]['reason'];
+                 if (strpos(strtolower($reason), 'exists') !== false || strpos(strtolower($reason), 'configured') !== false) {
+                     $success = true;
+                 } else {
+                     wp_send_json_error(['message' => 'cPanel could not create domain: ' . $reason]);
+                 }
+             }
+        }
+
+        // THE FIX: Eradicate the old domain routing so the scanner never sees duplicates!
+        if ($success && !empty($old_domain) && $old_domain !== $new_domain) {
+            $whm_api->cpanel_uapi_call_v3_raw($username, 'AddonDomain', 'deladdondomain', ['domain' => $old_domain]);
+            $whm_api->cpanel_uapi_call_v3_raw($username, 'SubDomain', 'delsubdomain', ['domain' => $old_domain]);
         }
     }
 
-    // Trigger AutoSSL for the new domain
     $whm_api->cpanel_uapi_call_v3_raw($username, 'SSL', 'start_autossl_check', []);
 
     // ---------------------------------------------------------
@@ -823,39 +841,30 @@ function skyhshoso_assign_custom_domain() {
     $php_code = "<?php\n";
     $php_code .= "define('WP_USE_THEMES', false);\n";
     $php_code .= "require('./wp-load.php');\n";
-    // Replace core URLs
     $php_code .= "update_option('siteurl', '{$new_url_https}');\n";
     $php_code .= "update_option('home', '{$new_url_https}');\n";
-    // Search & Replace for images and content links
     $php_code .= "global \$wpdb;\n";
     $php_code .= "\$wpdb->query(\$wpdb->prepare(\"UPDATE {\$wpdb->posts} SET post_content = REPLACE(post_content, %s, %s)\", '{$old_url_clean}', '{$new_url_https}'));\n";
     $php_code .= "\$wpdb->query(\$wpdb->prepare(\"UPDATE {\$wpdb->postmeta} SET meta_value = REPLACE(meta_value, %s, %s)\", '{$old_url_clean}', '{$new_url_https}'));\n";
     $php_code .= "echo 'MIGRATION_SUCCESS';\n";
     $php_code .= "@unlink(__FILE__);\n";
 
-    // Inject the migration script remotely into the correct document root
     $whm_api->cpanel_uapi_call_v3_raw($username, 'Fileman', 'save_file_content', [
         'dir' => trim($relative_dir, '/'),
         'file' => $filename,
         'content' => $php_code
     ]);
 
-    // DNS BYPASS FIX: Trigger the script using the Server IP and spoofing the Host header
     $whm_host_domain = parse_url($whm_api_host, PHP_URL_HOST) ?: $whm_api_host;
     $whm_host_domain = preg_replace('/:\d+$/', '', $whm_host_domain);
     $server_ip = gethostbyname($whm_host_domain);
-
-    $trigger_url = "http://{$server_ip}/{$filename}";
     
-    $response = wp_remote_get($trigger_url, [
+    wp_remote_get("http://{$server_ip}/{$filename}", [
         'timeout' => 45, 
         'sslverify' => false,
-        'headers' => [
-            'Host' => $new_domain // Tricks Apache into serving the exact folder for the new domain!
-        ]
+        'headers' => ['Host' => $new_domain]
     ]);
 
-    // Safety fallback: Clean up the file forcefully if HTTP failed to self-destruct
     $whm_api->cpanel_uapi_call_v3_raw($username, 'Fileman', 'file_op', [
         'op' => 'unlink',
         'sourcefiles' => trim($relative_dir, '/') . '/' . $filename
@@ -864,25 +873,17 @@ function skyhshoso_assign_custom_domain() {
     // ---------------------------------------------------------
     // PHASE 3: Update Dashboard Cache & Database
     // ---------------------------------------------------------
-    
-    // Update the local WordPress Sites table so it displays the new domain instantly
     $existing_sites = get_posts([
         'post_type'  => 'skyhshoso_wp_site',
-        'meta_query' => [
-            ['key' => '_skyhshoso_wp_site_url', 'value' => $old_url_clean, 'compare' => 'LIKE']
-        ],
+        'meta_query' => [['key' => '_skyhshoso_wp_site_url', 'value' => $old_url_clean, 'compare' => 'LIKE']],
         'post_status' => 'publish'
     ]);
 
     if (!empty($existing_sites)) {
         update_post_meta($existing_sites[0]->ID, '_skyhshoso_wp_site_url', $new_url_https);
-        wp_update_post([
-            'ID' => $existing_sites[0]->ID,
-            'post_title' => $new_domain
-        ]);
+        wp_update_post(['ID' => $existing_sites[0]->ID, 'post_title' => $new_domain]);
     }
 
     SkyHSHOSO_WHM_API::clear_stats_cache($hosting_id);
-
     wp_send_json_success(['message' => "Successfully mapped $new_domain to the site! The database has been migrated to match the new URL."]);
 }
