@@ -145,6 +145,100 @@ function skyhshoso_wp_provision_callback() {
             'sourcefiles' => $doc_root . '/cgi-bin'
         ]);
     }
+	// ---------------------------------------------------------
+        // PHASE 2.5: UNIVERSAL AUTO-INSTALLER ROUTER
+        // ---------------------------------------------------------
+        $wp_admin_user = 'admin_' . rand(1000, 9999);
+        $wp_admin_pass = wp_generate_password(16, true, true);
+        $wp_admin_email = 'hello@' . $clean_domain;
+
+        $options = get_option('skyhshoso_settings_group', array());
+        $installer_engine = isset($options['wp_installer_engine']) ? $options['wp_installer_engine'] : 'wptoolkit';
+        $plugin_set_id = isset($_POST['plugin_set']) ? absint($_POST['plugin_set']) : 0;
+
+        $whm_host_domain = parse_url($whm_api_host, PHP_URL_HOST) ?: $whm_api_host;
+        $whm_host_domain = preg_replace('/:\d+$/', '', $whm_host_domain);
+
+        sleep(2); // Breathing room for WHM to register the new domain
+
+        if ($installer_engine === 'wptoolkit') {
+            // --- WP TOOLKIT LOGIC ---
+            $wpt_api_url = "https://{$whm_host_domain}:2087/cgi/wpt/index.php/v1/installations";
+            $wpt_payload = [
+                'domain'           => $clean_domain,
+                'installationPath' => '', 
+                'title'            => 'New WordPress Site',
+                'language'         => 'en_US',
+                'protocol'         => 'https',
+                'admin'            => [
+                    'login'    => $wp_admin_user,
+                    'password' => $wp_admin_pass,
+                    'email'    => $wp_admin_email
+                ]
+            ];
+            if ($plugin_set_id > 0) $wpt_payload['set'] = $plugin_set_id;
+
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $wpt_api_url);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($wpt_payload));
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'Authorization: whm root:' . $whm_api_token, 
+                'Content-Type: application/json',
+                'Accept: application/json'
+            ]);
+            $response = curl_exec($ch);
+            $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if ($status !== 200 && $status !== 201 && $status !== 202 && class_exists('SkyHSHOSO_Logger')) {
+                SkyHSHOSO_Logger::error('WP Toolkit Auto-Install Failed. Status: '.$status.'. Response: ' . $response);
+            }
+
+        } elseif ($installer_engine === 'softaculous') {
+            // --- SOFTACULOUS LOGIC ---
+            // Softaculous uses WHM API 1 to trigger installations via CLI script 26 (WordPress)
+            $soft_payload = [
+                'api.version' => '1',
+                'user'        => $whm_username,
+                'script'      => '26', // Softaculous ID for WordPress
+                'domain'      => $clean_domain,
+                'softdomain'  => $clean_domain,
+                'softdirectory'=> '',
+                'admin_username'=> $wp_admin_user,
+                'admin_pass'  => $wp_admin_pass,
+                'admin_email' => $wp_admin_email,
+                'site_name'   => 'New WordPress Site',
+            ];
+            // Send payload to Softaculous API via WHM Root Call
+            $res = $whm_api->call('softaculous', $soft_payload);
+            
+            if (isset($res['metadata']['result']) && $res['metadata']['result'] != 1 && class_exists('SkyHSHOSO_Logger')) {
+                SkyHSHOSO_Logger::error('Softaculous Install Failed: ' . json_encode($res));
+            }
+
+        } elseif ($installer_engine === 'installatron') {
+            // --- INSTALLATRON LOGIC ---
+            $installatron_payload = [
+                'cmd'      => 'install',
+                'user'     => $whm_username,
+                'application' => 'wordpress',
+                'url'      => 'https://' . $clean_domain,
+                'login'    => $wp_admin_user,
+                'passwd'   => $wp_admin_pass,
+                'email'    => $wp_admin_email,
+                'sitetitle'=> 'New WordPress Site',
+            ];
+            // Installatron natively hooks into WHM API
+            $res = $whm_api->call('installatron', $installatron_payload);
+
+            if (isset($res['metadata']['result']) && $res['metadata']['result'] != 1 && class_exists('SkyHSHOSO_Logger')) {
+                SkyHSHOSO_Logger::error('Installatron Install Failed: ' . json_encode($res));
+            }
+        }
+        // ---------------------------------------------------------
 
     // 3. Register Domain in the Dashboard Database
     SkyHSHOSO_WHM_API::clear_stats_cache($hosting_id);
@@ -173,20 +267,17 @@ function skyhshoso_wp_provision_callback() {
 
     // 4. Build Detailed Instructions for the Frontend
     $success_msg = '<div style="text-align: left; line-height: 1.5;">';
-    $success_msg .= '<strong style="font-size: 16px; color: #166534;">✓ Domain prepped successfully!</strong><br><br>';
-    $success_msg .= 'The server directory is clean and strictly isolated. <strong>Please choose an installer to finish:</strong><br><br>';
+    $success_msg .= '<strong style="font-size: 16px; color: #166534;">✓ Application Container Provisioned!</strong><br><br>';
     
-    $success_msg .= '<strong>Option 1: WP Toolkit (Recommended)</strong><br>';
-    $success_msg .= '&bull; Close this window.<br>';
-    $success_msg .= '&bull; Click the <strong>"cPanel"</strong> button next to your new site.<br>';
-    $success_msg .= '&bull; Open WP Toolkit inside cPanel and click "Install".<br><br>';
+    $success_msg .= 'Your WordPress site has been automatically installed via WP Toolkit and is completely isolated.<br><br>';
     
-    $success_msg .= '<strong>Option 2: Installatron or Softaculous</strong><br>';
-    $success_msg .= '&bull; Log into your cPanel account.<br>';
-    $success_msg .= '&bull; Open Installatron or Softaculous and click Install.<br>';
-    $success_msg .= '&bull; Select <code>' . esc_html($clean_domain) . '</code> from the Domain dropdown.<br><br>';
+    $success_msg .= '<div style="background:#f8fafc; border:1px solid #e2e8f0; padding:12px; border-radius:6px;">';
+    $success_msg .= '<strong>Your Temporary WP Admin Credentials:</strong><br>';
+    $success_msg .= 'Username: <code>' . esc_html($wp_admin_user) . '</code><br>';
+    $success_msg .= 'Password: <code>' . esc_html($wp_admin_pass) . '</code><br>';
+    $success_msg .= '</div><br>';
     
-    $success_msg .= '<span style="color: #d63638;"><em><strong>Important:</strong> Leave the "Directory" (or "In Directory") field completely blank so WordPress installs to the root of your domain!</em></span>';
+    $success_msg .= '<em>Note: You don\'t need these credentials right now. You can securely log in using the blue <strong>WP Admin</strong> SSO button on your dashboard!</em>';
     $success_msg .= '</div>';
 
     wp_send_json_success(['message' => $success_msg]);
@@ -886,4 +977,176 @@ function skyhshoso_assign_custom_domain() {
 
     SkyHSHOSO_WHM_API::clear_stats_cache($hosting_id);
     wp_send_json_success(['message' => "Successfully mapped $new_domain to the site! The database has been migrated to match the new URL."]);
+}
+
+/**
+ * =========================================================================
+ * TWO-WAY WHM ACCOUNT MANAGEMENT (SYNC, SUSPEND, TERMINATE)
+ * =========================================================================
+ */
+
+// 1. Synchronize Account with WHM
+add_action('wp_ajax_skyhshoso_sync_account', 'skyhshoso_sync_account_callback');
+function skyhshoso_sync_account_callback() {
+    $nonce = $_POST['nonce'] ?? '';
+    if (!wp_verify_nonce($nonce, 'skyhshoso_dashboard_nonce')) wp_send_json_error(['message' => 'Security check failed.']);
+    
+    $hosting_id = absint($_POST['hosting_id']);
+    $current_user_id = get_current_user_id();
+    if ($current_user_id !== absint(get_post_field('post_author', $hosting_id)) && !current_user_can('administrator')) {
+        wp_send_json_error(['message' => 'Permission denied.']);
+    }
+
+    $server_id = get_post_meta($hosting_id, 'skyhshoso_server_id', true);
+    $username  = get_post_meta($hosting_id, 'skyhshoso_hosting_username', true);
+
+    require_once dirname(__FILE__) . '/class-whm-integration.php';
+    $whm_api = new SkyHSHOSO_WHM_API(
+        get_post_meta($server_id, '_skyhshoso_whm_user_id', true),
+        get_post_meta($server_id, '_skyhshoso_whm_token', true),
+        get_post_meta($server_id, '_skyhshoso_whm_host', true)
+    );
+
+    $summary = $whm_api->call('accountsummary', ['user' => $username]);
+
+    if (isset($summary['metadata']['result']) && $summary['metadata']['result'] == 1) {
+        $acct = $summary['data']['acct'][0];
+        
+        // Sync Disk Usage & Status
+        $status = $acct['suspended'] ? 'suspended' : 'active';
+        update_post_meta($hosting_id, 'skyhshoso_account_status', $status);
+        
+        SkyHSHOSO_WHM_API::clear_stats_cache($hosting_id); // Clear cache so new stats load
+        wp_send_json_success(['message' => 'Account successfully synced with WHM.', 'status' => $status]);
+    } else {
+        wp_send_json_error(['message' => 'Could not locate account on server. It may have been deleted.']);
+    }
+}
+
+// 2. Suspend / Unsuspend Account
+add_action('wp_ajax_skyhshoso_toggle_suspend', 'skyhshoso_toggle_suspend_callback');
+function skyhshoso_toggle_suspend_callback() {
+    $nonce = $_POST['nonce'] ?? '';
+    if (!wp_verify_nonce($nonce, 'skyhshoso_dashboard_nonce')) wp_send_json_error(['message' => 'Security check failed.']);
+    
+    $hosting_id = absint($_POST['hosting_id']);
+    $action = sanitize_text_field($_POST['status_action']); // 'suspend' or 'unsuspend'
+    
+    if ($current_user_id !== absint(get_post_field('post_author', $hosting_id)) && !current_user_can('administrator')) {
+        wp_send_json_error(['message' => 'Permission denied.']);
+    }
+
+    $server_id = get_post_meta($hosting_id, 'skyhshoso_server_id', true);
+    $username  = get_post_meta($hosting_id, 'skyhshoso_hosting_username', true);
+
+    require_once dirname(__FILE__) . '/class-whm-integration.php';
+    $whm_api = new SkyHSHOSO_WHM_API(
+        get_post_meta($server_id, '_skyhshoso_whm_user_id', true),
+        get_post_meta($server_id, '_skyhshoso_whm_token', true),
+        get_post_meta($server_id, '_skyhshoso_whm_host', true)
+    );
+
+    if ($action === 'suspend') {
+        $res = $whm_api->call('suspendacct', ['user' => $username, 'reason' => 'Suspended by user via dashboard.']);
+        $new_status = 'suspended';
+    } else {
+        $res = $whm_api->call('unsuspendacct', ['user' => $username]);
+        $new_status = 'active';
+    }
+
+    if (isset($res['metadata']['result']) && $res['metadata']['result'] == 1) {
+        update_post_meta($hosting_id, 'skyhshoso_account_status', $new_status);
+        wp_send_json_success(['message' => 'Account status updated successfully.', 'new_status' => $new_status]);
+    } else {
+        wp_send_json_error(['message' => 'WHM Error: ' . ($res['metadata']['reason'] ?? 'Unknown API error')]);
+    }
+}
+
+// 3. Terminate Account (And Cancel WooCommerce Subscription)
+add_action('wp_ajax_skyhshoso_terminate_account', 'skyhshoso_terminate_account_callback');
+function skyhshoso_terminate_account_callback() {
+    $nonce = $_POST['nonce'] ?? '';
+    if (!wp_verify_nonce($nonce, 'skyhshoso_dashboard_nonce')) wp_send_json_error(['message' => 'Security check failed.']);
+    
+    $hosting_id = absint($_POST['hosting_id']);
+    if (get_current_user_id() !== absint(get_post_field('post_author', $hosting_id)) && !current_user_can('administrator')) {
+        wp_send_json_error(['message' => 'Permission denied.']);
+    }
+
+    $server_id = get_post_meta($hosting_id, 'skyhshoso_server_id', true);
+    $username  = get_post_meta($hosting_id, 'skyhshoso_hosting_username', true);
+
+    require_once dirname(__FILE__) . '/class-whm-integration.php';
+    $whm_api = new SkyHSHOSO_WHM_API(
+        get_post_meta($server_id, '_skyhshoso_whm_user_id', true),
+        get_post_meta($server_id, '_skyhshoso_whm_token', true),
+        get_post_meta($server_id, '_skyhshoso_whm_host', true)
+    );
+
+    // 1. Remove from WHM Server
+    $res = $whm_api->call('removeacct', ['user' => $username]);
+    
+    if (isset($res['metadata']['result']) && $res['metadata']['result'] == 1) {
+        
+        // 2. Cancel WooCommerce Subscription if it exists
+        $sub_id = get_post_meta($hosting_id, 'skyhshoso_subscription_id', true);
+        if ($sub_id && function_exists('wcs_get_subscription')) {
+            $subscription = wcs_get_subscription($sub_id);
+            if ($subscription && $subscription->can_be_updated_to('cancelled')) {
+                $subscription->update_status('cancelled', 'Account permanently terminated by user via Dashboard.');
+            }
+        }
+
+        // 3. Trash the local hosting post
+        wp_trash_post($hosting_id);
+        wp_send_json_success(['message' => 'Account securely terminated and billing cancelled.']);
+    } else {
+        wp_send_json_error(['message' => 'WHM Error: ' . ($res['metadata']['reason'] ?? 'Could not terminate server account.')]);
+    }
+}
+/**
+ * =========================================================================
+ * FETCH WP TOOLKIT SETS FROM WHM
+ * =========================================================================
+ */
+add_action('wp_ajax_skyhshoso_sync_wpt_sets', 'skyhshoso_sync_wpt_sets_callback');
+function skyhshoso_sync_wpt_sets_callback() {
+    // Security check: Only admins can sync server settings
+    if (!current_user_can('manage_options')) wp_send_json_error(['message' => 'Permission denied.']);
+
+    // Grab the first active server to use its API credentials
+    $servers = get_posts(['post_type' => 'skyhshoso_server', 'posts_per_page' => 1, 'post_status' => 'publish']);
+    if (empty($servers)) wp_send_json_error(['message' => 'No active servers found to query.']);
+
+    $server_id = $servers[0]->ID;
+    $whm_api_token = get_post_meta($server_id, '_skyhshoso_whm_token', true);
+    $whm_api_host  = get_post_meta($server_id, '_skyhshoso_whm_host', true);
+
+    if (empty($whm_api_token) || empty($whm_api_host)) wp_send_json_error(['message' => 'Server API credentials missing.']);
+
+    $whm_host_domain = parse_url($whm_api_host, PHP_URL_HOST) ?: $whm_api_host;
+    $whm_host_domain = preg_replace('/:\d+$/', '', $whm_host_domain);
+
+    // WP Toolkit API Endpoint for fetching Sets
+    $wpt_api_url = "https://{$whm_host_domain}:2087/cgi/wpt/index.php/v1/sets";
+
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $wpt_api_url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); 
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Authorization: whm root:' . $whm_api_token,
+        'Accept: application/json'
+    ]);
+
+    $response = curl_exec($ch);
+    $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($status === 200) {
+        $data = json_decode($response, true);
+        wp_send_json_success(['sets' => $data]);
+    } else {
+        wp_send_json_error(['message' => 'WHM API Error (' . $status . '): ' . $response]);
+    }
 }

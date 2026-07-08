@@ -25,6 +25,7 @@ class SkyHSHOSO_Settings {
         // Register settings tabs and content.
         add_filter( 'skyhshoso_settings_tabs', array( $this, 'add_settings_tabs' ) );
         add_action( 'skyhshoso_settings_tab_billing',  array( $this, 'render_billing_tab' ) );
+        add_action( 'skyhshoso_settings_tab_customize', array( $this, 'render_customize_tab' ) ); 
         add_action( 'skyhshoso_settings_tab_emails',   array( $this, 'render_emails_tab' ) );
         add_action( 'skyhshoso_settings_tab_invoice',  array( $this, 'render_invoice_tab' ) );
         add_action( 'skyhshoso_settings_tab_email_templates',  array( $this, 'render_email_templates_tab' ) );
@@ -50,6 +51,7 @@ class SkyHSHOSO_Settings {
      */
     public function add_settings_tabs( $tabs ) {
         $tabs['billing']          = __( 'Billing/Subscription', 'skyhs-hosting-solution' );
+        $tabs['customize']        = __( 'Customize', 'skyhs-hosting-solution' ); 
         $tabs['emails']           = __( 'Emails', 'skyhs-hosting-solution' );
         $tabs['invoice']          = __( 'Invoice', 'skyhs-hosting-solution' );
         $tabs['email_templates']  = __( 'Email Templates', 'skyhs-hosting-solution' );
@@ -69,143 +71,33 @@ class SkyHSHOSO_Settings {
      * Register plugin settings
      */
     public function register_settings() {
-        // Each tab gets its OWN settings group so WordPress only processes
-        // the current tab's registered options when its form is saved.
-        register_setting(
-            'skyhshoso_settings_general',
-            'skyhshoso_settings_group',
-            array( $this, 'sanitize_settings' )
-        );
+        register_setting( 'skyhshoso_settings_general', 'skyhshoso_settings_group', array( $this, 'sanitize_settings' ) );
+        register_setting( 'skyhshoso_settings_billing', 'skyhshoso_settings_group', array( $this, 'sanitize_settings' ) );
+        register_setting( 'skyhshoso_settings_billing', 'skyhs_hosting_solution_enable_early_renewal', array( 'sanitize_callback' => 'sanitize_text_field' ) );
+        register_setting( 'skyhshoso_settings_billing', 'skyhshoso_drip_downloadable_content_on_renewal', array( 'sanitize_callback' => 'sanitize_text_field' ) );
+        register_setting( 'skyhshoso_settings_billing', 'skyhshoso_zero_initial_payment_requires_payment', array( 'sanitize_callback' => 'sanitize_text_field' ) );
+        register_setting( 'skyhshoso_settings_billing', 'skyhshoso_accept_manual_renewals', array( 'sanitize_callback' => 'sanitize_text_field' ) );
+        register_setting( 'skyhshoso_settings_billing', 'skyhshoso_turn_off_automatic_payments', array( 'sanitize_callback' => 'sanitize_text_field' ) );
+        register_setting( 'skyhshoso_settings_billing', 'skyhshoso_allow_switching', array( 'sanitize_callback' => array( $this, 'sanitize_allow_switching' ) ) );
+        register_setting( 'skyhshoso_settings_billing', 'skyhshoso_apportion_recurring_price', array( 'sanitize_callback' => 'sanitize_text_field' ) );
+        register_setting( 'skyhshoso_settings_billing', 'skyhshoso_apportion_sign_up_fee', array( 'sanitize_callback' => 'sanitize_text_field' ) );
+        register_setting( 'skyhshoso_settings_billing', 'skyhshoso_apportion_length', array( 'sanitize_callback' => 'sanitize_text_field' ) );
+        register_setting( 'skyhshoso_settings_emails', 'skyhshoso_settings_group', array( $this, 'sanitize_settings' ) );
+        register_setting( 'skyhshoso_settings_invoice', 'skyhshoso_settings_group', array( $this, 'sanitize_settings' ) );
+        register_setting( 'skyhshoso_settings_customize', 'skyhshoso_settings_group', array( $this, 'sanitize_settings' ) );
+        register_setting( 'skyhshoso_settings_email_templates', 'skyhshoso_settings_group', array( $this, 'sanitize_settings' ) );
 
-        register_setting(
-            'skyhshoso_settings_billing',
-            'skyhshoso_settings_group',
-            array( $this, 'sanitize_settings' )
-        );
-        register_setting(
-            'skyhshoso_settings_billing',
-            'skyhs_hosting_solution_enable_early_renewal',
-            array( 'sanitize_callback' => 'sanitize_text_field' )
-        );
-        register_setting(
-            'skyhshoso_settings_billing',
-            'skyhshoso_drip_downloadable_content_on_renewal',
-            array( 'sanitize_callback' => 'sanitize_text_field' )
-        );
-        register_setting(
-            'skyhshoso_settings_billing',
-            'skyhshoso_zero_initial_payment_requires_payment',
-            array( 'sanitize_callback' => 'sanitize_text_field' )
-        );
-        register_setting(
-            'skyhshoso_settings_billing',
-            'skyhshoso_accept_manual_renewals',
-            array( 'sanitize_callback' => 'sanitize_text_field' )
-        );
-        register_setting(
-            'skyhshoso_settings_billing',
-            'skyhshoso_turn_off_automatic_payments',
-            array( 'sanitize_callback' => 'sanitize_text_field' )
-        );
-        register_setting(
-            'skyhshoso_settings_billing',
-            'skyhshoso_allow_switching',
-            array( 'sanitize_callback' => array( $this, 'sanitize_allow_switching' ) )
-        );
-        register_setting(
-            'skyhshoso_settings_billing',
-            'skyhshoso_apportion_recurring_price',
-            array( 'sanitize_callback' => 'sanitize_text_field' )
-        );
-        register_setting(
-            'skyhshoso_settings_billing',
-            'skyhshoso_apportion_sign_up_fee',
-            array( 'sanitize_callback' => 'sanitize_text_field' )
-        );
-        register_setting(
-            'skyhshoso_settings_billing',
-            'skyhshoso_apportion_length',
-            array( 'sanitize_callback' => 'sanitize_text_field' )
-        );
+        add_settings_section( 'hosting_solution_general_section', __( 'General Settings', 'skyhs-hosting-solution' ), array( $this, 'render_general_section' ), 'skyhshoso_settings_group' );
 
-        register_setting(
-            'skyhshoso_settings_emails',
-            'skyhshoso_settings_group',
-            array( $this, 'sanitize_settings' )
-        );
-
-        register_setting(
-            'skyhshoso_settings_invoice',
-            'skyhshoso_settings_group',
-            array( $this, 'sanitize_settings' )
-        );
-
-        register_setting(
-            'skyhshoso_settings_customize',
-            'skyhshoso_settings_group',
-            array( $this, 'sanitize_settings' )
-        );
-
-        register_setting(
-            'skyhshoso_settings_email_templates',
-            'skyhshoso_settings_group',
-            array( $this, 'sanitize_settings' )
-        );
-
-        add_settings_section(
-            'hosting_solution_general_section',
-            __( 'General Settings', 'skyhs-hosting-solution' ),
-            array( $this, 'render_general_section' ),
-            'skyhshoso_settings_group'
-        );
-
-        add_settings_field(
-            'test_mode',
-            __( 'Test Mode', 'skyhs-hosting-solution' ),
-            array( $this, 'render_test_mode_field' ),
-            'skyhshoso_settings_group',
-            'hosting_solution_general_section'
-        );
-
-        add_settings_field(
-            'disable_subscription_processing',
-            __( 'Disable Subscription Processing', 'skyhs-hosting-solution' ),
-            array( $this, 'render_disable_subscription_processing_field' ),
-            'skyhshoso_settings_group',
-            'hosting_solution_general_section'
-        );
-        
-        add_settings_field(
-            'disable_domain_registration',
-            __( 'Disable Domain Registration', 'skyhs-hosting-solution' ),
-            array( $this, 'render_disable_domain_registration_field' ),
-            'skyhshoso_settings_group',
-            'hosting_solution_general_section'
-        );
-        
-		add_settings_field(
-			'dashboard_page',
-			__( 'Dashboard Page', 'skyhs-hosting-solution' ),
-			array( $this, 'render_dashboard_page_field' ),
-			'skyhshoso_settings_group',
-			'hosting_solution_general_section'
-		);
-
-		add_settings_field(
-			'enable_wc_log',
-			__( 'Enable WC Log', 'skyhs-hosting-solution' ),
-			array( $this, 'render_enable_wc_log_field' ),
-			'skyhshoso_settings_group',
-			'hosting_solution_general_section'
-		);
-
-	}
+        add_settings_field( 'test_mode', __( 'Test Mode', 'skyhs-hosting-solution' ), array( $this, 'render_test_mode_field' ), 'skyhshoso_settings_group', 'hosting_solution_general_section' );
+        add_settings_field( 'disable_subscription_processing', __( 'Disable Subscription Processing', 'skyhs-hosting-solution' ), array( $this, 'render_disable_subscription_processing_field' ), 'skyhshoso_settings_group', 'hosting_solution_general_section' );
+        add_settings_field( 'disable_domain_registration', __( 'Disable Domain Registration', 'skyhs-hosting-solution' ), array( $this, 'render_disable_domain_registration_field' ), 'skyhshoso_settings_group', 'hosting_solution_general_section' );
+        add_settings_field( 'dashboard_page', __( 'Dashboard Page', 'skyhs-hosting-solution' ), array( $this, 'render_dashboard_page_field' ), 'skyhshoso_settings_group', 'hosting_solution_general_section' );
+        add_settings_field( 'enable_wc_log', __( 'Enable WC Log', 'skyhs-hosting-solution' ), array( $this, 'render_enable_wc_log_field' ), 'skyhshoso_settings_group', 'hosting_solution_general_section' );
+    }
 
     /**
      * Sanitize settings
-     *
-     * @param array $input The settings input.
-     * @return array
      */
     public function sanitize_settings( $input ) {
         $existing = get_option( 'skyhshoso_settings_group', array() );
@@ -215,107 +107,66 @@ class SkyHSHOSO_Settings {
 
         $sanitized_input = $existing;
 
-        // Only process fields that are present in the submitted form.
-        // Each tab's form only sends its own fields and is registered under
-        // its own settings group, so cross-tab interference is impossible.
-
         // --- General settings ---
-        if ( isset( $input['test_mode'] ) ) {
-            $sanitized_input['test_mode'] = ! empty( $input['test_mode'] ) ? 1 : 0;
-        }
-        if ( isset( $input['disable_subscription_processing'] ) ) {
-            $sanitized_input['disable_subscription_processing'] = ! empty( $input['disable_subscription_processing'] ) ? 1 : 0;
-        }
-        if ( isset( $input['disable_domain_registration'] ) ) {
-            $sanitized_input['disable_domain_registration'] = ! empty( $input['disable_domain_registration'] ) ? 1 : 0;
-        }
-		if ( isset( $input['dashboard_page'] ) ) {
-			$sanitized_input['dashboard_page'] = absint( $input['dashboard_page'] );
-		}
-		if ( isset( $input['enable_wc_log'] ) ) {
-			$sanitized_input['enable_wc_log'] = ! empty( $input['enable_wc_log'] ) ? 1 : 0;
-		}
-        // --- NEW: Sanitize WP Base Domains ---
-        if ( isset( $input['wp_base_domains'] ) ) {
-            $sanitized_input['wp_base_domains'] = sanitize_text_field( $input['wp_base_domains'] );
+        if ( isset( $input['test_mode'] ) ) $sanitized_input['test_mode'] = ! empty( $input['test_mode'] ) ? 1 : 0;
+        if ( isset( $input['disable_subscription_processing'] ) ) $sanitized_input['disable_subscription_processing'] = ! empty( $input['disable_subscription_processing'] ) ? 1 : 0;
+        if ( isset( $input['disable_domain_registration'] ) ) $sanitized_input['disable_domain_registration'] = ! empty( $input['disable_domain_registration'] ) ? 1 : 0;
+        if ( isset( $input['dashboard_page'] ) ) $sanitized_input['dashboard_page'] = absint( $input['dashboard_page'] );
+        if ( isset( $input['enable_wc_log'] ) ) $sanitized_input['enable_wc_log'] = ! empty( $input['enable_wc_log'] ) ? 1 : 0;
+        if ( isset( $input['wp_base_domains'] ) ) $sanitized_input['wp_base_domains'] = sanitize_text_field( $input['wp_base_domains'] );
+        
+        // Save Available Installer Engines (Array)
+        if ( isset( $input['wp_installer_engines'] ) && is_array( $input['wp_installer_engines'] ) ) {
+            $sanitized_input['wp_installer_engines'] = array_map( 'sanitize_text_field', $input['wp_installer_engines'] );
+        } else {
+            $sanitized_input['wp_installer_engines'] = array();
         }
 
-		// --- Billing settings ---
-        if ( isset( $input['grace_period_days'] ) ) {
-            $sanitized_input['grace_period_days'] = absint( $input['grace_period_days'] );
+        // Save Default Installer Engine
+        if ( isset( $input['wp_default_installer_engine'] ) ) {
+            $sanitized_input['wp_default_installer_engine'] = sanitize_text_field( $input['wp_default_installer_engine'] );
         }
-        if ( isset( $input['failed_payment_threshold'] ) ) {
-            $sanitized_input['failed_payment_threshold'] = absint( $input['failed_payment_threshold'] );
+
+        // Sanitize WPT Sets
+        if ( isset( $input['wpt_frontend_sets'] ) && is_array( $input['wpt_frontend_sets'] ) ) {
+            $sanitized_input['wpt_frontend_sets'] = array_map( 'sanitize_text_field', $input['wpt_frontend_sets'] );
+        } else {
+            $sanitized_input['wpt_frontend_sets'] = array();
         }
-        if ( isset( $input['reminder_days'] ) ) {
-            $sanitized_input['reminder_days'] = absint( $input['reminder_days'] );
+        if ( isset( $input['wpt_sets_cache'] ) ) {
+            $sanitized_input['wpt_sets_cache'] = wp_unslash( $input['wpt_sets_cache'] );
         }
-        if ( isset( $input['deletion_reminder_days'] ) ) {
-            $sanitized_input['deletion_reminder_days'] = absint( $input['deletion_reminder_days'] );
-        }
+
+        // --- Billing settings ---
+        if ( isset( $input['grace_period_days'] ) ) $sanitized_input['grace_period_days'] = absint( $input['grace_period_days'] );
+        if ( isset( $input['failed_payment_threshold'] ) ) $sanitized_input['failed_payment_threshold'] = absint( $input['failed_payment_threshold'] );
+        if ( isset( $input['reminder_days'] ) ) $sanitized_input['reminder_days'] = absint( $input['reminder_days'] );
+        if ( isset( $input['deletion_reminder_days'] ) ) $sanitized_input['deletion_reminder_days'] = absint( $input['deletion_reminder_days'] );
 
         // --- Email settings ---
-        if ( isset( $input['email_provisioning'] ) ) {
-            $sanitized_input['email_provisioning'] = ! empty( $input['email_provisioning'] ) ? 1 : 0;
-        }
-        if ( isset( $input['email_suspension'] ) ) {
-            $sanitized_input['email_suspension'] = ! empty( $input['email_suspension'] ) ? 1 : 0;
-        }
-        if ( isset( $input['email_termination_notice'] ) ) {
-            $sanitized_input['email_termination_notice'] = ! empty( $input['email_termination_notice'] ) ? 1 : 0;
-        }
-        if ( isset( $input['email_terminated'] ) ) {
-            $sanitized_input['email_terminated'] = ! empty( $input['email_terminated'] ) ? 1 : 0;
-        }
-        if ( isset( $input['email_reminder'] ) ) {
-            $sanitized_input['email_reminder'] = ! empty( $input['email_reminder'] ) ? 1 : 0;
-        }
-        if ( isset( $input['email_deletion_warning'] ) ) {
-            $sanitized_input['email_deletion_warning'] = ! empty( $input['email_deletion_warning'] ) ? 1 : 0;
-        }
+        if ( isset( $input['email_provisioning'] ) ) $sanitized_input['email_provisioning'] = ! empty( $input['email_provisioning'] ) ? 1 : 0;
+        if ( isset( $input['email_suspension'] ) ) $sanitized_input['email_suspension'] = ! empty( $input['email_suspension'] ) ? 1 : 0;
+        if ( isset( $input['email_termination_notice'] ) ) $sanitized_input['email_termination_notice'] = ! empty( $input['email_termination_notice'] ) ? 1 : 0;
+        if ( isset( $input['email_terminated'] ) ) $sanitized_input['email_terminated'] = ! empty( $input['email_terminated'] ) ? 1 : 0;
+        if ( isset( $input['email_reminder'] ) ) $sanitized_input['email_reminder'] = ! empty( $input['email_reminder'] ) ? 1 : 0;
+        if ( isset( $input['email_deletion_warning'] ) ) $sanitized_input['email_deletion_warning'] = ! empty( $input['email_deletion_warning'] ) ? 1 : 0;
 
         // --- Invoice settings ---
-        if ( isset( $input['invoice_company_name'] ) ) {
-            $sanitized_input['invoice_company_name'] = sanitize_text_field( $input['invoice_company_name'] );
-        }
-        if ( isset( $input['invoice_address'] ) ) {
-            $sanitized_input['invoice_address'] = sanitize_textarea_field( $input['invoice_address'] );
-        }
-        if ( isset( $input['invoice_footer'] ) ) {
-            $sanitized_input['invoice_footer'] = sanitize_text_field( $input['invoice_footer'] );
-        }
+        if ( isset( $input['invoice_company_name'] ) ) $sanitized_input['invoice_company_name'] = sanitize_text_field( $input['invoice_company_name'] );
+        if ( isset( $input['invoice_address'] ) ) $sanitized_input['invoice_address'] = sanitize_textarea_field( $input['invoice_address'] );
+        if ( isset( $input['invoice_footer'] ) ) $sanitized_input['invoice_footer'] = sanitize_text_field( $input['invoice_footer'] );
 
         // --- Customize settings ---
-        if ( isset( $input['custom_logo'] ) ) {
-            $sanitized_input['custom_logo'] = esc_url_raw( $input['custom_logo'] );
-        }
-        if ( isset( $input['custom_sitename'] ) ) {
-            $sanitized_input['custom_sitename'] = sanitize_text_field( $input['custom_sitename'] );
-        }
-        if ( isset( $input['show_only_logo'] ) ) {
-            $sanitized_input['show_only_logo'] = ! empty( $input['show_only_logo'] ) ? 1 : 0;
-        }
-        if ( isset( $input['guest_welcome_title'] ) ) {
-            $sanitized_input['guest_welcome_title'] = sanitize_text_field( $input['guest_welcome_title'] );
-        }
-        if ( isset( $input['guest_welcome_subtitle'] ) ) {
-            $sanitized_input['guest_welcome_subtitle'] = sanitize_textarea_field( $input['guest_welcome_subtitle'] );
-        }
-        if ( isset( $input['enable_guest_dashboard'] ) ) {
-            $sanitized_input['enable_guest_dashboard'] = ! empty( $input['enable_guest_dashboard'] ) ? 1 : 0;
-        }
-        if ( isset( $input['back_to_site_url'] ) ) {
-            $sanitized_input['back_to_site_url'] = esc_url_raw( $input['back_to_site_url'] );
-        }
-        if ( isset( $input['guest_welcome_btn_text'] ) ) {
-            $sanitized_input['guest_welcome_btn_text'] = sanitize_text_field( $input['guest_welcome_btn_text'] );
-        }
-        if ( isset( $input['guest_welcome_btn_url'] ) ) {
-            $sanitized_input['guest_welcome_btn_url'] = esc_url_raw( $input['guest_welcome_btn_url'] );
-        }
-        if ( isset( $input['header_menu_id'] ) ) {
-            $sanitized_input['header_menu_id'] = sanitize_text_field( $input['header_menu_id'] );
-        }
+        if ( isset( $input['custom_logo'] ) ) $sanitized_input['custom_logo'] = esc_url_raw( $input['custom_logo'] );
+        if ( isset( $input['custom_sitename'] ) ) $sanitized_input['custom_sitename'] = sanitize_text_field( $input['custom_sitename'] );
+        if ( isset( $input['show_only_logo'] ) ) $sanitized_input['show_only_logo'] = ! empty( $input['show_only_logo'] ) ? 1 : 0;
+        if ( isset( $input['guest_welcome_title'] ) ) $sanitized_input['guest_welcome_title'] = sanitize_text_field( $input['guest_welcome_title'] );
+        if ( isset( $input['guest_welcome_subtitle'] ) ) $sanitized_input['guest_welcome_subtitle'] = sanitize_textarea_field( $input['guest_welcome_subtitle'] );
+        if ( isset( $input['enable_guest_dashboard'] ) ) $sanitized_input['enable_guest_dashboard'] = ! empty( $input['enable_guest_dashboard'] ) ? 1 : 0;
+        if ( isset( $input['back_to_site_url'] ) ) $sanitized_input['back_to_site_url'] = esc_url_raw( $input['back_to_site_url'] );
+        if ( isset( $input['guest_welcome_btn_text'] ) ) $sanitized_input['guest_welcome_btn_text'] = sanitize_text_field( $input['guest_welcome_btn_text'] );
+        if ( isset( $input['guest_welcome_btn_url'] ) ) $sanitized_input['guest_welcome_btn_url'] = esc_url_raw( $input['guest_welcome_btn_url'] );
+        if ( isset( $input['header_menu_id'] ) ) $sanitized_input['header_menu_id'] = sanitize_text_field( $input['header_menu_id'] );
 
         // --- Email templates ---
         $email_types = array( 'provisioning', 'suspension', 'termination_notice', 'terminated', 'reminder', 'deletion_warning' );
@@ -684,7 +535,7 @@ class SkyHSHOSO_Settings {
 		echo '<input type="checkbox" id="enable_wc_log" name="skyhshoso_settings_group[enable_wc_log]" value="1" ' . checked( 1, $checked, false ) . ' />';
 		echo '<label for="enable_wc_log">' . esc_html__( 'Log server, hosting, domain, WordPress, and subscription creation failures to WooCommerce logs (WooCommerce > Status > Logs)', 'skyhs-hosting-solution' ) . '</label>';
 	}
-
+	
 	/**
 	 * Enqueue admin scripts
 	 */
@@ -1277,6 +1128,10 @@ class SkyHSHOSO_Settings {
         <?php
     }
 
+    // -------------------------------------------------------------------------
+    // Customize Settings tab
+    // -------------------------------------------------------------------------
+
     /**
      * Render Customize settings tab.
      */
@@ -1288,6 +1143,7 @@ class SkyHSHOSO_Settings {
         $guest_welcome_title = isset( $options['guest_welcome_title'] ) ? $options['guest_welcome_title'] : '';
         $guest_welcome_subtitle = isset( $options['guest_welcome_subtitle'] ) ? $options['guest_welcome_subtitle'] : '';
         $enable_guest_dashboard = isset( $options['enable_guest_dashboard'] ) ? (bool) $options['enable_guest_dashboard'] : false;
+        $engine = isset( $options['wp_installer_engine'] ) ? $options['wp_installer_engine'] : 'wptoolkit';
         ?>
         <form method="post" action="options.php">
             <?php settings_fields( 'skyhshoso_settings_customize' ); ?>
@@ -1347,6 +1203,95 @@ class SkyHSHOSO_Settings {
                 <p style="font-size:12px;color:#646970;margin:8px 0 0 0;"><?php esc_html_e( 'The subtitle shown to non-logged-in visitors on the dashboard. Leave empty for default.', 'skyhs-hosting-solution' ); ?></p>
             </div>
 
+            <?php
+            $enabled_engines = isset( $options['wp_installer_engines'] ) ? (array) $options['wp_installer_engines'] : array( 'wptoolkit' );
+            $default_engine = isset( $options['wp_default_installer_engine'] ) ? $options['wp_default_installer_engine'] : 'wptoolkit';
+            
+            // PHP Safeguard: If the saved default engine was somehow unchecked, fallback to 'none'
+            if ( $default_engine !== 'none' && ! in_array( $default_engine, $enabled_engines ) ) {
+                $default_engine = !empty($enabled_engines) ? $enabled_engines[0] : 'none';
+            }
+
+            // Centralized list of supported engines
+            $all_engines = array(
+                'wptoolkit'    => 'WP Toolkit (Recommended)',
+                'softaculous'  => 'Softaculous',
+                'installatron' => 'Installatron'
+            );
+            ?>
+            <div class="skyhshoso-wizard-form-group" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #dcdcde;">
+                <label style="font-weight:600; display:block; margin-bottom:8px;"><?php esc_html_e( 'Available Auto-Installer Engines', 'skyhs-hosting-solution' ); ?></label>
+                
+                <?php foreach ( $all_engines as $val => $label ) : ?>
+                    <label style="display:block; margin-bottom:6px; font-weight:400;">
+                        <input type="checkbox" class="skyhs-engine-checkbox" id="skyhs-engine-<?php echo esc_attr( $val ); ?>" name="skyhshoso_settings_group[wp_installer_engines][]" value="<?php echo esc_attr( $val ); ?>" <?php checked( in_array( $val, $enabled_engines ) ); ?>>
+                        <?php echo esc_html( $label ); ?>
+                    </label>
+                <?php endforeach; ?>
+
+                <label style="font-weight:600; display:block; margin-bottom:8px; margin-top:16px;"><?php esc_html_e( 'Default Engine', 'skyhs-hosting-solution' ); ?></label>
+                <select id="skyhs-default-engine-select" name="skyhshoso_settings_group[wp_default_installer_engine]" style="width:100%; max-width: 300px; padding:8px; border-radius:4px;">
+                    <option value="none" <?php selected( $default_engine, 'none' ); ?>>None (Manual Setup Only)</option>
+                    
+                    <?php 
+                    // Render dropdown options. If not checked above, hide and disable them!
+                    foreach ( $all_engines as $val => $label ) : 
+                        $is_enabled = in_array( $val, $enabled_engines );
+                    ?>
+                        <option value="<?php echo esc_attr( $val ); ?>" class="skyhs-engine-option" data-engine="<?php echo esc_attr( $val ); ?>" <?php selected( $default_engine, $val ); ?> <?php echo $is_enabled ? '' : 'disabled hidden'; ?>>
+                            <?php echo esc_html( $label ); ?>
+                        </option>
+                    <?php endforeach; ?>
+
+                </select>
+                <p style="font-size:12px;color:#646970;margin:8px 0 0 0;"><?php esc_html_e( 'The default engine will be pre-selected for the user during onboarding. (Only engines checked above will appear here).', 'skyhs-hosting-solution' ); ?></p>
+            </div>
+
+            <div id="skyhs-wptoolkit-settings-wrapper" style="display: <?php echo in_array( 'wptoolkit', $enabled_engines ) ? 'block' : 'none'; ?>;">
+                <div class="skyhshoso-wizard-form-group" style="margin-top: 20px; padding: 20px; background:#f0f6fc; border-left:4px solid #72aee6;">
+                    <label style="font-weight:600; display:block; margin-bottom:8px;"><?php esc_html_e( 'WP Toolkit Plugin Sets (Website Purpose)', 'skyhs-hosting-solution' ); ?></label>
+                    <?php $this->render_wpt_sets_ui(); ?>
+                </div>
+            </div>
+
+            <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                var checkboxes = document.querySelectorAll('.skyhs-engine-checkbox');
+                var defaultSelect = document.getElementById('skyhs-default-engine-select');
+                var wpToolkitSettings = document.getElementById('skyhs-wptoolkit-settings-wrapper');
+
+                checkboxes.forEach(function(chk) {
+                    chk.addEventListener('change', function() {
+                        var val = this.value;
+                        var option = defaultSelect.querySelector('option[data-engine="' + val + '"]');
+                        
+                        // Toggle the visibility of the WP Toolkit sync box
+                        if(val === 'wptoolkit' && wpToolkitSettings) {
+                            wpToolkitSettings.style.display = this.checked ? 'block' : 'none';
+                        }
+
+                        // Live-update the Default Engine dropdown options
+                        if (option) {
+                            if (this.checked) {
+                                option.disabled = false;
+                                option.hidden = false;
+                                option.style.display = 'block';
+                            } else {
+                                option.disabled = true;
+                                option.hidden = true;
+                                option.style.display = 'none';
+                                
+                                // If the user unchecked the engine that is currently selected as default, snap to 'none'
+                                if (defaultSelect.value === val) {
+                                    defaultSelect.value = 'none';
+                                }
+                            }
+                        }
+                    });
+                });
+            });
+            </script>
+
             <div class="skyhshoso-wizard-actions" style="margin-top: 30px; border-top: 1px solid #dcdcde; padding-top: 20px;">
                 <div></div>
                 <div>
@@ -1354,6 +1299,94 @@ class SkyHSHOSO_Settings {
                 </div>
             </div>
         </form>
+        <?php
+    }
+
+    /**
+     * WP Toolkit Sync UI Renderer
+     */
+    public function render_wpt_sets_ui() {
+        $options = get_option('skyhshoso_settings_group', array());
+        $selected_sets = isset($options['wpt_frontend_sets']) ? (array) $options['wpt_frontend_sets'] : array();
+        $sets_cache = isset($options['wpt_sets_cache']) ? json_decode($options['wpt_sets_cache'], true) : array();
+
+        echo '<div style="margin-bottom: 12px;">';
+        echo '<div id="skyhs-wpt-sets-container" style="background:#f6f7f7; border:1px solid #dcdcde; padding:16px; border-radius:4px; max-width:500px; max-height:250px; overflow-y:auto; margin-bottom:12px;">';
+        
+        if (!empty($sets_cache) && is_array($sets_cache)) {
+            foreach ($sets_cache as $set) {
+                $checked = in_array($set['id'], $selected_sets) ? 'checked' : '';
+                echo '<label style="display:block; margin-bottom:10px; font-weight:600;">';
+                echo '<input type="checkbox" name="skyhshoso_settings_group[wpt_frontend_sets][]" value="' . esc_attr($set['id']) . '" ' . $checked . '> ';
+                echo esc_html($set['name']);
+                echo '</label>';
+            }
+        } else {
+            echo '<p style="color:#646970; margin:0;">No sets synced yet. Click the sync button below to pull from your WHM server.</p>';
+        }
+        echo '</div>';
+
+        echo '<input type="hidden" id="skyhs-wpt-sets-cache" name="skyhshoso_settings_group[wpt_sets_cache]" value="' . esc_attr(isset($options['wpt_sets_cache']) ? $options['wpt_sets_cache'] : '[]') . '">';
+        echo '<button type="button" id="skyhs-sync-wpt-sets-btn" class="button button-secondary">Sync Sets from WHM</button>';
+        echo '<span id="skyhs-sync-wpt-sets-status" style="margin-left:12px; font-size:13px; font-weight:600;"></span>';
+        echo '<p class="description" style="margin-top:8px;">Select which WP Toolkit bundles your users can choose when creating a new site.</p>';
+        echo '</div>';
+        ?>
+        <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var syncBtn = document.getElementById('skyhs-sync-wpt-sets-btn');
+            if(syncBtn) {
+                syncBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    var btn = this;
+                    var status = document.getElementById('skyhs-sync-wpt-sets-status');
+                    var container = document.getElementById('skyhs-wpt-sets-container');
+                    var cacheInput = document.getElementById('skyhs-wpt-sets-cache');
+
+                    btn.disabled = true;
+                    status.textContent = 'Syncing securely from WHM...';
+                    status.style.color = '#2271b1';
+
+                    var fd = new FormData();
+                    fd.append('action', 'skyhshoso_sync_wpt_sets');
+
+                    fetch(ajaxurl, { method: 'POST', body: fd })
+                    .then(function(r) { return r.json(); })
+                    .then(function(d) {
+                        btn.disabled = false;
+                        if (d.success && d.data.sets) {
+                            status.textContent = '✓ Synced! Please save settings.';
+                            status.style.color = '#00a32a';
+
+                            var simpleCache = d.data.sets.map(function(s) { 
+                                var setName = s.name || s.title || s.displayName || ('Set ID: ' + s.id);
+                                return {id: s.id, name: setName}; 
+                            });
+
+                            cacheInput.value = JSON.stringify(simpleCache);
+
+                            container.innerHTML = '';
+                            simpleCache.forEach(function(set) {
+                                var lbl = document.createElement('label');
+                                lbl.style.display = 'block';
+                                lbl.style.marginBottom = '10px';
+                                lbl.style.fontWeight = '600';
+                                lbl.innerHTML = '<input type="checkbox" name="skyhshoso_settings_group[wpt_frontend_sets][]" value="' + set.id + '" checked> ' + set.name;
+                                container.appendChild(lbl);
+                            });
+                        } else {
+                            status.textContent = 'Error: ' + (d.data ? d.data.message : 'Unknown error');
+                            status.style.color = '#d63638';
+                        }
+                    }).catch(function(e) {
+                        btn.disabled = false;
+                        status.textContent = 'Network error.';
+                        status.style.color = '#d63638';
+                    });
+                });
+            }
+        });
+        </script>
         <?php
     }
 

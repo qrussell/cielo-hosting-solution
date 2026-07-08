@@ -1,6 +1,6 @@
 /**
  * SkyHS Dashboard JavaScript
- * Unified and deduplicated version with Live Chunked WP Discovery.
+ * Phase 1 UX Master Version: Toasts, Skeletons, & Live DOM Updates
  */
 (function() {
     'use strict';
@@ -13,14 +13,83 @@
         i18n: typeof skyhshosoDashboard !== 'undefined' && skyhshosoDashboard.i18n ? skyhshosoDashboard.i18n : {}
     };
 
-    // Global Fleet Scanner Function
+    // --- PHASE 1: UI/UX INJECTOR ---
+    function injectModernStyles() {
+        if (document.getElementById('skyhs-modern-ux-styles')) return;
+        var style = document.createElement('style');
+        style.id = 'skyhs-modern-ux-styles';
+        style.innerHTML = `
+            /* Toast Notifications */
+            .skyhs-toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 999999; display: flex; flex-direction: column; gap: 12px; pointer-events: none; }
+            .skyhs-toast { min-width: 280px; max-width: 400px; background: #fff; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); padding: 16px 20px; display: flex; align-items: flex-start; gap: 14px; transform: translateX(120%); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); border-left: 4px solid #3b82f6; pointer-events: auto; }
+            .skyhs-toast.skyhs-toast-visible { transform: translateX(0); }
+            .skyhs-toast-success { border-left-color: #10b981; }
+            .skyhs-toast-error { border-left-color: #ef4444; }
+            .skyhs-toast-icon { flex-shrink: 0; width: 22px; height: 22px; margin-top: 2px; }
+            .skyhs-toast-success .skyhs-toast-icon { color: #10b981; }
+            .skyhs-toast-error .skyhs-toast-icon { color: #ef4444; }
+            .skyhs-toast-message { font-size: 14px; color: #374151; line-height: 1.5; margin: 0; font-family: system-ui, -apple-system, sans-serif; font-weight: 500; }
+            /* Skeleton Loaders */
+            @keyframes skyhs-shimmer { 0% { background-position: -468px 0; } 100% { background-position: 468px 0; } }
+            .skyhs-skeleton { background: #f6f7f8; background-image: linear-gradient(to right, #f6f7f8 0%, #edeef1 20%, #f6f7f8 40%, #f6f7f8 100%); background-repeat: no-repeat; background-size: 800px 100%; animation: skyhs-shimmer 1.5s linear infinite; border-radius: 4px; }
+            /* Live Fade Transitions */
+            .skyhs-row-updated { animation: skyhs-highlight-row 2s ease-out; }
+            @keyframes skyhs-highlight-row { 0% { background-color: #fef3c7; } 100% { background-color: transparent; } }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // --- PHASE 1: TOAST SYSTEM ---
+    window.skyhshosoToast = function(msg, type = 'success') {
+        let container = document.querySelector('.skyhs-toast-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.className = 'skyhs-toast-container';
+            document.body.appendChild(container);
+        }
+        const toast = document.createElement('div');
+        toast.className = `skyhs-toast skyhs-toast-${type}`;
+        
+        const iconSvg = type === 'success' 
+            ? `<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`
+            : `<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
+        
+        toast.innerHTML = `<div class="skyhs-toast-icon">${iconSvg}</div><p class="skyhs-toast-message">${msg}</p>`;
+        container.appendChild(toast);
+        
+        // Trigger sliding animation
+        requestAnimationFrame(() => toast.classList.add('skyhs-toast-visible'));
+        
+        setTimeout(() => {
+            toast.classList.remove('skyhs-toast-visible');
+            setTimeout(() => toast.remove(), 400); // Wait for slide-out transition
+        }, 4500);
+    };
+
+    // Global Fleet Scanner Function (Upgraded with Skeletons)
     window.skyhshosoProcessAsyncFleetScan = function(hostingIds) {
         var tbody = document.getElementById('skyhshoso-wp-site-tbody');
         if (!tbody) return;
 
+        // PHASE 1: Shimmering Skeleton Loader
         var scanningRow = document.createElement('tr');
         scanningRow.id = 'skyhs-fleet-scanning-row';
-        scanningRow.innerHTML = '<td colspan="3" style="text-align:center; padding:15px; color:#6b7280; font-size:13px;"><span class="skyhshoso-spinner" style="display:inline-block;width:14px;height:14px;border:2px solid #cbd5e1;border-top-color:#3b82f6;border-radius:50%;animation:spin 1s linear infinite;vertical-align:middle;margin-right:8px;"></span> Live scanning server directories...</td>';
+        scanningRow.innerHTML = `
+            <td style="padding:16px;vertical-align:middle;">
+                <div class="skyhs-skeleton" style="width: 45%; height: 16px; margin-bottom: 8px;"></div>
+                <div class="skyhs-skeleton" style="width: 25%; height: 12px;"></div>
+            </td>
+            <td style="padding:16px;vertical-align:middle;">
+                <div class="skyhs-skeleton" style="width: 55px; height: 22px; border-radius: 12px;"></div>
+            </td>
+            <td style="padding:16px;text-align:right;vertical-align:middle;">
+                <div style="display:flex;gap:8px;justify-content:flex-end;">
+                    <div class="skyhs-skeleton" style="width: 110px; height: 32px; border-radius: 6px;"></div>
+                    <div class="skyhs-skeleton" style="width: 90px; height: 32px; border-radius: 6px;"></div>
+                    <div class="skyhs-skeleton" style="width: 90px; height: 32px; border-radius: 6px;"></div>
+                </div>
+            </td>
+        `;
         tbody.appendChild(scanningRow);
 
         var existingUrls = [];
@@ -69,334 +138,83 @@
         Promise.all(promises).then(function() {
             scanningRow.remove();
             if (existingUrls.length === 0) {
-                 tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:20px;">No WordPress installations found.</td></tr>';
+                 tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:30px;color:#6b7280;">No WordPress installations found on this server.</td></tr>';
             }
         });
     };
 
     function initRedirect() {
         var redirectEl = document.getElementById('skyhshoso-redirect-url');
-        if (redirectEl && redirectEl.dataset.url) {
-            window.location.href = redirectEl.dataset.url;
-        }
-    }
-
-    function initSearchInputs() {
-        var searchInputs = document.querySelectorAll('.skyhshoso-search-input');
-        searchInputs.forEach(function(input) {
-            var clearBtn = input.parentElement.querySelector('.skyhshoso-search-clear');
-            if (!clearBtn) return;
-
-            input.setAttribute('data-value', input.value);
-            input.addEventListener('input', function() {
-                this.setAttribute('data-value', this.value);
-            });
-
-            clearBtn.addEventListener('click', function() {
-                input.value = '';
-                input.setAttribute('data-value', '');
-                input.focus();
-                input.dispatchEvent(new Event('input', { bubbles: true }));
-            });
-        });
-    }
-
-    function setupPagination(cfg) {
-        var container = document.getElementById(cfg.paginationContainerId);
-        var tbody = cfg.tbodyId ? document.getElementById(cfg.tbodyId) : null;
-        var input = document.getElementById(cfg.searchInputId);
-        var noResults = document.getElementById(cfg.noResultsId);
-        var table = cfg.tableId ? document.getElementById(cfg.tableId) : null;
-
-        if (!container || !tbody) return;
-
-        var totalPages = parseInt(container.getAttribute('data-total-pages')) || 1;
-        var currentPage = parseInt(container.getAttribute('data-current-page')) || 1;
-        var searchTerm = '';
-        var ajaxAction = cfg.ajaxAction;
-        var debounceTimer;
-
-        function fetchPage(page, search, callback) {
-            var baseUrl = container.getAttribute('data-base-url') || '';
-            var fd = new FormData();
-            fd.append('action', ajaxAction);
-            fd.append('paged', page);
-            fd.append('search', search);
-            fd.append('nonce', config.dashboardNonce);
-            fd.append('base_url', baseUrl);
-
-            fetch(config.ajaxUrl, {
-                method: 'POST',
-                body: new URLSearchParams(fd)
-            })
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                if (d.success) {
-                    tbody.innerHTML = d.data.html;
-                    currentPage = d.data.current_page;
-                    totalPages = d.data.total_pages;
-                    renderControls();
-                    
-                    // Kick off chunked fleet scanner if instructed by PHP
-                    if (d.data.hosting_queue && typeof window.skyhshosoProcessAsyncFleetScan === 'function') {
-                        window.skyhshosoProcessAsyncFleetScan(d.data.hosting_queue);
-                    }
-
-                    if (noResults) {
-                        var hasRows = tbody.querySelectorAll('tr').length > 0;
-                        noResults.style.display = hasRows ? 'none' : 'block';
-                    }
-                    if (table) {
-                        table.style.display = tbody.querySelectorAll('tr').length > 0 ? 'table' : 'none';
-                    }
-                    if (callback) callback(d.data);
-                }
-            })
-            .catch(function() {});
-        }
-
-        function renderControls() {
-            container.innerHTML = '';
-            if (totalPages <= 1) return;
-
-            var prevBtn = document.createElement('button');
-            prevBtn.className = 'skyhshoso-pagination-btn';
-            prevBtn.innerHTML = '&laquo;';
-            prevBtn.disabled = currentPage === 1;
-            prevBtn.addEventListener('click', function() {
-                if (currentPage > 1) fetchPage(currentPage - 1, searchTerm);
-            });
-            container.appendChild(prevBtn);
-
-            for (var i = 1; i <= totalPages; i++) {
-                (function(pageNum) {
-                    var pageBtn = document.createElement('button');
-                    pageBtn.className = 'skyhshoso-pagination-btn';
-                    if (pageNum === currentPage) pageBtn.classList.add('active');
-                    pageBtn.innerText = pageNum;
-                    pageBtn.addEventListener('click', function() {
-                        if (pageNum !== currentPage) fetchPage(pageNum, searchTerm);
-                    });
-                    container.appendChild(pageBtn);
-                })(i);
-            }
-
-            var nextBtn = document.createElement('button');
-            nextBtn.className = 'skyhshoso-pagination-btn';
-            nextBtn.innerHTML = '&raquo;';
-            nextBtn.disabled = currentPage === totalPages;
-            nextBtn.addEventListener('click', function() {
-                if (currentPage < totalPages) fetchPage(currentPage + 1, searchTerm);
-            });
-            container.appendChild(nextBtn);
-        }
-
-        if (input) {
-            input.addEventListener('input', function() {
-                clearTimeout(debounceTimer);
-                debounceTimer = setTimeout(function() {
-                    searchTerm = input.value.trim();
-                    fetchPage(1, searchTerm);
-                }, 300);
-            });
-        }
-        
-        renderControls();
-
-        if (cfg.autoFetch) {
-            fetchPage(1, '');
-        }
-    }
-
-    function initPeriodToggle() {
-        var toggles = document.querySelectorAll('.skyhshoso-material-toggle-input');
-        var slider = document.querySelector('.skyhshoso-material-toggle-slider');
-        var cards = document.querySelectorAll('.skyhshoso-period-card');
-
-        function sync(inp) {
-            if (!slider || !inp) return;
-            var label = inp.nextElementSibling;
-            slider.style.width = label.offsetWidth + 'px';
-            slider.style.transform = 'translateX(' + inp.parentElement.offsetLeft + 'px)';
-        }
-
-        toggles.forEach(function(inp) {
-            inp.addEventListener('change', function() {
-                sync(this);
-                var grp = this.getAttribute('data-period-group');
-                cards.forEach(function(c) {
-                    c.style.display = c.getAttribute('data-period-group') === grp ? 'block' : 'none';
-                });
-            });
-        });
-
-        var initChecked = document.querySelector('.skyhshoso-material-toggle-input:checked');
-        if (initChecked) {
-            sync(initChecked);
-            var grp = initChecked.getAttribute('data-period-group');
-            cards.forEach(function(c) {
-                c.style.display = c.getAttribute('data-period-group') === grp ? 'block' : 'none';
-            });
-        }
-
-        window.addEventListener('resize', function() {
-            var active = document.querySelector('.skyhshoso-material-toggle-input:checked');
-            if (active) sync(active);
-        });
-    }
-
-    function initAddDomainForm() {
-        var form = document.getElementById('skyhshoso-add-domain-form');
-        var msgDiv = document.getElementById('skyhshoso-form-message');
-        if (!form) return;
-
-        form.addEventListener('submit', function(e) {
-            e.preventDefault();
-            var btn = form.querySelector('button[type="submit"]');
-            var btnTxt = btn.querySelector('.skyhshoso-button-text');
-            var orig = btnTxt.textContent;
-
-            if (msgDiv) {
-                msgDiv.innerHTML = '';
-                msgDiv.className = 'skyhshoso-message';
-            }
-            btnTxt.textContent = 'Adding...';
-            btn.disabled = true;
-
-            var fd = new FormData(form);
-            fd.append('action', 'skyhshoso_add_domain');
-            var nEl = document.getElementById('skyhshoso_domain_nonce');
-            if (nEl) fd.append('nonce', nEl.value);
-
-            fetch(config.ajaxUrl, {
-                method: 'POST',
-                body: new URLSearchParams(fd)
-            })
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                if (d.success) {
-                    if (msgDiv) {
-                        msgDiv.className = 'skyhshoso-message skyhshoso-message-success';
-                        msgDiv.innerHTML = '<p>' + d.data.message + '</p>';
-                    }
-                    setTimeout(function() { location.reload(); }, 1500);
-                } else {
-                    if (msgDiv) {
-                        msgDiv.className = 'skyhshoso-message skyhshoso-message-error';
-                        msgDiv.innerHTML = '<p>Error: ' + (d.data ? d.data.message : 'Unknown error') + '</p>';
-                    }
-                    btnTxt.textContent = orig;
-                    btn.disabled = false;
-                }
-            })
-            .catch(function() {
-                if (msgDiv) {
-                    msgDiv.className = 'skyhshoso-message skyhshoso-message-error';
-                    msgDiv.innerHTML = '<p>An error occurred.</p>';
-                }
-                btnTxt.textContent = orig;
-                btn.disabled = false;
-            });
-        });
+        if (redirectEl && redirectEl.dataset.url) window.location.href = redirectEl.dataset.url;
     }
 
     function initCPanelLogin() {
         document.addEventListener('click', function(e) {
             
-            // 1. Check if the user clicked a Standard cPanel Login Button
+            // 1. WP Toolkit / Main cPanel Button
             var cpanelBtn = e.target.closest('#skyhshoso-cpanel-login-btn, .skyhshoso-cpanel-login-btn, .hm-cpanel-login-btn');
             if (cpanelBtn) {
                 e.preventDefault();
-                var txt = cpanelBtn.querySelector('.skyhshoso-button-text');
-                var origText = txt ? txt.textContent : cpanelBtn.textContent;
                 
-                if (txt) {
-                    txt.textContent = 'Connecting...';
-                } else {
-                    cpanelBtn.textContent = 'Connecting...';
+                // 1. GRAB DATA FIRST
+                var hostingId = cpanelBtn.getAttribute('data-hosting-id');
+                var btnNonce = cpanelBtn.getAttribute('data-nonce') || config.dashboardNonce;
+
+                if (!hostingId) {
+                    window.skyhshosoToast('Error: Hosting ID is missing from this button.', 'error');
+                    return;
                 }
+                
+                // 2. SAVE ORIGINAL HTML TO RESTORE ICONS LATER
+                var origHTML = cpanelBtn.innerHTML; 
+                var txtSpan = cpanelBtn.querySelector('.skyhshoso-button-text');
+                var spinnerHtml = '<span style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin-right:6px;vertical-align:middle;"></span>';
+                
+                if (txtSpan) {
+                    txtSpan.innerHTML = spinnerHtml + 'Connecting...';
+                } else {
+                    cpanelBtn.innerHTML = spinnerHtml + 'Connecting...';
+                }
+                
                 cpanelBtn.disabled = true;
 
-                var hostingId = cpanelBtn.getAttribute('data-hosting-id');
-                var nonce = cpanelBtn.getAttribute('data-nonce') || config.dashboardNonce;
-
+                // 3. FIRE AJAX
                 var fd = new FormData();
                 fd.append('action', 'skyhshoso_generate_cpanel_login_url');
                 fd.append('hosting_id', hostingId);
-                fd.append('nonce', nonce);
+                fd.append('nonce', btnNonce);
 
-                fetch(config.ajaxUrl, {
-                    method: 'POST',
-                    body: new URLSearchParams(fd)
-                })
-                .then(function(r) { return r.json(); })
-                .then(function(d) {
+                fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fd) })
+                .then(r => r.json())
+                .then(d => {
                     if (d.success && d.data && d.data.login_url) {
                         window.open(d.data.login_url, '_blank');
                     } else {
-                        alert('Failed to connect: ' + (d.data ? d.data.message : 'Unauthorized'));
+                        window.skyhshosoToast('Failed to connect: ' + (d.data ? d.data.message : 'Unauthorized'), 'error');
                     }
-                    if (txt) txt.textContent = origText; else cpanelBtn.textContent = origText;
+                    cpanelBtn.innerHTML = origHTML; 
                     cpanelBtn.disabled = false;
-                })
-                .catch(function() {
-                    alert('A connection error occurred.');
-                    if (txt) txt.textContent = origText; else cpanelBtn.textContent = origText;
+                }).catch(() => {
+                    window.skyhshosoToast('A network connection error occurred.', 'error');
+                    cpanelBtn.innerHTML = origHTML; 
                     cpanelBtn.disabled = false;
                 });
             }
 
-            // 2. Check if the user clicked a Softaculous WP SSO Login Button
-            var wpSsoBtn = e.target.closest('.skyhshoso-wp-sso-btn');
-            if (wpSsoBtn) {
-                e.preventDefault();
-                var origSsoText = wpSsoBtn.textContent;
-                wpSsoBtn.textContent = 'Connecting...';
-                wpSsoBtn.disabled = true;
-
-                var wpHostingId = wpSsoBtn.getAttribute('data-hosting-id');
-                var wpNonce = wpSsoBtn.getAttribute('data-nonce') || config.dashboardNonce;
-                var insid = wpSsoBtn.getAttribute('data-insid') || '';
-
-                var fdWp = new FormData();
-                fdWp.append('action', 'skyhshoso_get_cpanel_section_url');
-                fdWp.append('hosting_id', wpHostingId);
-                fdWp.append('section', 'wordpress');
-                fdWp.append('nonce', wpNonce);
-                
-                if (insid) {
-                    fdWp.append('insid', insid);
-                }
-
-                fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fdWp) })
-                .then(function(r) { return r.json(); })
-                .then(function(d) {
-                    wpSsoBtn.disabled = false;
-                    wpSsoBtn.textContent = origSsoText;
-                    if (d.success && d.data && d.data.url) {
-                        window.open(d.data.url, '_blank');
-                    } else {
-                        alert('Could not auto-login. Try logging in to cPanel directly.');
-                    }
-                })
-                .catch(function(err) {
-                    wpSsoBtn.disabled = false;
-                    wpSsoBtn.textContent = origSsoText;
-                    alert('Connection error.');
-                });
-            }
-
-            // 3. Check if the user clicked a Native WP Toolkit Direct SSO Login Button
+            // 2. Direct SSO Button (WP Sites Tab)
             var directSsoBtn = e.target.closest('.skyhshoso-wp-direct-sso-btn');
             if (directSsoBtn) {
                 e.preventDefault();
-                var origDirectText = directSsoBtn.textContent;
-                directSsoBtn.textContent = 'Connecting...';
-                directSsoBtn.disabled = true;
-
+                
+                // 1. GRAB DATA FIRST
                 var hId = directSsoBtn.getAttribute('data-hosting-id');
                 var sUrl = directSsoBtn.getAttribute('data-site-url');
                 var n = directSsoBtn.getAttribute('data-nonce') || config.dashboardNonce;
+                
+                // 2. DOM MANIPULATION
+                var origDirectHTML = directSsoBtn.innerHTML;
+                directSsoBtn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin-right:6px;vertical-align:middle;"></span>';
+                directSsoBtn.disabled = true;
 
                 var fd = new FormData();
                 fd.append('action', 'skyhshoso_generate_wp_sso');
@@ -408,59 +226,66 @@
                 .then(r => r.json())
                 .then(d => {
                     directSsoBtn.disabled = false;
-                    directSsoBtn.textContent = origDirectText;
+                    directSsoBtn.innerHTML = origDirectHTML;
                     if (d.success && d.data && d.data.url) {
                         window.open(d.data.url, '_blank');
                     } else {
-                        alert('SSO Failed: ' + (d.data ? d.data.message : 'Unknown error'));
+                        window.skyhshosoToast('SSO Failed: ' + (d.data ? d.data.message : 'Unknown error'), 'error');
                     }
-                })
-                .catch(err => {
+                }).catch(err => {
                     directSsoBtn.disabled = false;
-                    directSsoBtn.textContent = origDirectText;
-                    alert('Connection error.');
+                    directSsoBtn.innerHTML = origDirectHTML;
+                    window.skyhshosoToast('A network connection error occurred.', 'error');
                 });
             }
 
-            // 4. Check if the user clicked the Specific WP Login inside Detail Panel
+            // 3. Dropdown SSO Button (Hosting Tab) - THE RESTORED BUTTON!
             var detailWpLoginBtn = e.target.closest('.skyhshoso-wp-login-btn');
             if (detailWpLoginBtn) {
                 e.preventDefault();
+                
+                // 1. GRAB DATA FIRST
                 var hwId = detailWpLoginBtn.getAttribute('data-hosting-id');
                 var selector = document.getElementById('skyhshoso-wp-selector-' + hwId);
                 var swUrl = selector ? selector.value : '';
                 
-                if (!swUrl) return alert('Please select a WP site first.');
+                if (!swUrl) {
+                    window.skyhshosoToast('Please select a WP site from the dropdown first.', 'error');
+                    return;
+                }
 
-                var origLoginText = detailWpLoginBtn.textContent;
-                detailWpLoginBtn.textContent = 'Connecting...';
+                var n = detailWpLoginBtn.getAttribute('data-nonce') || config.dashboardNonce;
+
+                // 2. DOM MANIPULATION
+                var origLoginHTML = detailWpLoginBtn.innerHTML;
+                detailWpLoginBtn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin-right:6px;vertical-align:middle;"></span>';
                 detailWpLoginBtn.disabled = true;
 
                 var fdl = new FormData();
                 fdl.append('action', 'skyhshoso_generate_wp_sso');
                 fdl.append('hosting_id', hwId);
                 fdl.append('site_url', swUrl);
-                fdl.append('nonce', config.dashboardNonce);
+                fdl.append('nonce', n);
 
                 fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fdl) })
                 .then(r => r.json())
                 .then(d => {
                     detailWpLoginBtn.disabled = false;
-                    detailWpLoginBtn.textContent = origLoginText;
+                    detailWpLoginBtn.innerHTML = origLoginHTML;
                     if (d.success && d.data && d.data.url) {
                         window.open(d.data.url, '_blank');
                     } else {
-                        alert('SSO Failed: ' + (d.data ? d.data.message : 'Unknown error'));
+                        window.skyhshosoToast('SSO Failed: ' + (d.data ? d.data.message : 'Unknown error'), 'error');
                     }
                 })
                 .catch(err => {
                     detailWpLoginBtn.disabled = false;
-                    detailWpLoginBtn.textContent = origLoginText;
-                    alert('Connection error.');
+                    detailWpLoginBtn.innerHTML = origLoginHTML;
+                    window.skyhshosoToast('A network connection error occurred.', 'error');
                 });
             }
 
-            // 5. Check if the user clicked the Change Domain Button
+            // 4. Change Domain Button (PHASE 1 Live Updates)
             var changeDomainBtn = e.target.closest('.skyhshoso-wp-change-domain-btn');
             if (changeDomainBtn) {
                 e.preventDefault();
@@ -477,13 +302,16 @@
                     }
                 }
 
-                if (!cd_oUrl) return alert('Please select a WP site first.');
+                if (!cd_oUrl) {
+                    window.skyhshosoToast('Please wait for the scanner to finish or select a site.', 'error');
+                    return;
+                }
                 
-                var newDomain = prompt("Enter the new domain name (e.g., mynewsite.com):\n\nWARNING: Ensure your DNS A-Record points to this server's IP address before proceeding, otherwise the site will go offline.");
+                var newDomain = prompt("Enter the new domain name (e.g., mynewsite.com):\n\nEnsure your DNS A-Record points to this server's IP address.");
                 if (!newDomain) return;
 
-                var origText = changeDomainBtn.textContent;
-                changeDomainBtn.textContent = 'Migrating...';
+                var origText = changeDomainBtn.innerHTML;
+                changeDomainBtn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin-right:6px;vertical-align:middle;"></span> Migrating...';
                 changeDomainBtn.disabled = true;
 
                 var cd_n = changeDomainBtn.getAttribute('data-nonce') || config.dashboardNonce;
@@ -500,17 +328,44 @@
                 .then(r => r.json())
                 .then(d => {
                     if (d.success) {
-                        alert(d.data ? d.data.message : 'Domain updated successfully.');
-                        location.reload(); 
+                        window.skyhshosoToast(d.data ? d.data.message : 'Domain updated successfully!', 'success');
+                        
+                        var cleanNewDomain = newDomain.replace(/^https?:\/\//,'').replace(/^www\./,'');
+                        var row = changeDomainBtn.closest('tr.skyhshoso-wp-row');
+                        
+                        if (row) {
+                            var link = row.querySelector('a');
+                            if (link) { link.href = 'https://' + cleanNewDomain; link.textContent = cleanNewDomain; }
+                            row.setAttribute('data-url', cleanNewDomain);
+                            changeDomainBtn.setAttribute('data-old-url', 'https://' + cleanNewDomain);
+                            
+                            var ssoBtn = row.querySelector('.skyhshoso-wp-direct-sso-btn');
+                            if (ssoBtn) ssoBtn.setAttribute('data-site-url', 'https://' + cleanNewDomain);
+
+                            row.classList.add('skyhs-row-updated');
+                            setTimeout(() => row.classList.remove('skyhs-row-updated'), 2000);
+                        } else {
+                            var selectMenu = document.getElementById('skyhshoso-wp-selector-' + cd_hId);
+                            if (selectMenu) {
+                                var opt = selectMenu.options[selectMenu.selectedIndex];
+                                opt.value = 'https://' + cleanNewDomain;
+                                opt.textContent = cleanNewDomain;
+                                selectMenu.classList.add('skyhs-row-updated');
+                                setTimeout(() => selectMenu.classList.remove('skyhs-row-updated'), 2000);
+                            }
+                        }
+
+                        changeDomainBtn.innerHTML = origText;
+                        changeDomainBtn.disabled = false;
                     } else {
-                        alert('Error: ' + (d.data ? d.data.message : 'Failed to update domain.'));
-                        changeDomainBtn.textContent = origText;
+                        window.skyhshosoToast(d.data ? d.data.message : 'Failed to update domain.', 'error');
+                        changeDomainBtn.innerHTML = origText;
                         changeDomainBtn.disabled = false;
                     }
                 })
                 .catch(err => {
-                    alert('An error occurred during domain assignment.');
-                    changeDomainBtn.textContent = origText;
+                    window.skyhshosoToast('A network error occurred during migration.', 'error');
+                    changeDomainBtn.innerHTML = origText;
                     changeDomainBtn.disabled = false;
                 });
             }
@@ -524,7 +379,7 @@
             var hostingId = selector.getAttribute('data-hosting-id');
             var nonce = selector.getAttribute('data-nonce') || config.dashboardNonce;
             
-            selector.innerHTML = '<option value="">Scanning...</option>';
+            selector.innerHTML = '<option value="" disabled>Locating installations...</option>';
             
             var fd = new FormData();
             fd.append('action', 'skyhshoso_scan_wp_sites');
@@ -539,22 +394,21 @@
                     
                     if(res.success && res.data.local_sites && res.data.local_sites.length > 0) {
                         res.data.local_sites.forEach(function(site) {
-                            var cleanUrl = site.url.replace(/^https?:\/\//,''); // Strip it cleanly
+                            var cleanUrl = site.url.replace(/^https?:\/\//,'');
                             existingUrls.push(cleanUrl);
-                            
                             var option = document.createElement('option');
-                            option.value = site.url; // Keep https hidden in the value for the buttons
+                            option.value = site.url; 
                             option.setAttribute('data-docroot', site.doc_root || site.path);
                             option.setAttribute('data-insid', site.insid || '');
-                            option.textContent = cleanUrl; // Display the clean version
+                            option.textContent = cleanUrl;
                             selector.appendChild(option);
                         });
                     }
 
-                    // Kick off async live scanner
                     var scanOpt = document.createElement('option');
                     scanOpt.value = "";
-                    scanOpt.textContent = "Live scanning directories...";
+                    scanOpt.disabled = true;
+                    scanOpt.textContent = "Scanning directories...";
                     selector.appendChild(scanOpt);
 
                     var tFd = new FormData();
@@ -584,7 +438,12 @@
                                             existingUrls.push(cleanUrl);
                                             var tempSel = document.createElement('select');
                                             tempSel.innerHTML = checkRes.data.option_html;
-                                            selector.insertBefore(tempSel.firstChild, scanOpt);
+                                            
+                                            // Strip https for display
+                                            var newOpt = tempSel.firstChild;
+                                            newOpt.textContent = cleanUrl;
+                                            
+                                            selector.insertBefore(newOpt, scanOpt);
                                         }
                                     }
                                 }).catch(()=>{});
@@ -604,314 +463,8 @@
                             scanOpt.remove();
                         }
                     }).catch(()=>{ scanOpt.remove(); });
-                })
-                .catch(function() {
-                    selector.innerHTML = '<option value="">Error scanning sites</option>';
                 });
         });
-    }
-
-    function initCollaborators() {
-        var openBtn = document.getElementById('skyhshoso-new-collaborator-btn');
-        var cancelBtn = document.getElementById('skyhshoso-cancel-invite');
-        var formCont = document.getElementById('skyhshoso-collaborator-form-container');
-        var listCont = document.getElementById('skyhshoso-collaborator-lists');
-        
-        var invForm = document.getElementById('skyhshoso-invite-user-form');
-        var msgDiv = document.getElementById('skyhshoso-invite-message');
-        var mailInp = document.getElementById('invitee_email');
-
-        if (mailInp) {
-            var handleActive = function() {
-                if (mailInp.value.trim() !== '') {
-                    mailInp.parentElement.classList.add('has-value');
-                } else {
-                    mailInp.parentElement.classList.remove('has-value');
-                }
-            };
-            mailInp.addEventListener('focus', function() { this.parentElement.classList.add('focused'); });
-            mailInp.addEventListener('blur', function() { this.parentElement.classList.remove('focused'); handleActive(); });
-            mailInp.addEventListener('input', handleActive);
-            handleActive();
-        }
-
-        if (openBtn && formCont) {
-            openBtn.addEventListener('click', function() {
-                formCont.style.display = 'block';
-                if (listCont) listCont.style.display = 'none';
-            });
-        }
-        if (cancelBtn && formCont) {
-            cancelBtn.addEventListener('click', function() {
-                formCont.style.display = 'none';
-                if (listCont) listCont.style.display = 'block';
-            });
-        }
-
-        if (invForm) {
-            invForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-                var sBtn = invForm.querySelector('button[type="submit"]');
-                var sTxt = sBtn.querySelector('.skyhshoso-button-text');
-                var orig = sTxt.textContent;
-
-                if (msgDiv) { msgDiv.style.display = 'none'; msgDiv.innerHTML = ''; }
-                sTxt.textContent = 'Sending...';
-                sBtn.disabled = true;
-
-                var email = document.getElementById('invitee_email').value;
-                
-                var fd = new FormData();
-                fd.append('action', 'skyhshoso_invite_user');
-                fd.append('invitee_email', email);
-                fd.append('nonce', config.collaboratorNonce);
-
-                fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fd) })
-                .then(function(r) { return r.json(); })
-                .then(function(d) {
-                    if (d.success) {
-                        if (msgDiv) {
-                            msgDiv.className = 'skyhshoso-message skyhshoso-message-success';
-                            msgDiv.innerHTML = '<p>' + d.data.message + '</p>';
-                            msgDiv.style.display = 'block';
-                        }
-                        invForm.reset();
-                        refreshList();
-                        setTimeout(function() {
-                            formCont.style.display = 'none';
-                            if (listCont) listCont.style.display = 'block';
-                        }, 1500);
-                    } else {
-                        if (msgDiv) {
-                            msgDiv.className = 'skyhshoso-message skyhshoso-message-error';
-                            msgDiv.innerHTML = '<p>Error: ' + d.data.message + '</p>';
-                            msgDiv.style.display = 'block';
-                        }
-                    }
-                    sTxt.textContent = orig;
-                    sBtn.disabled = false;
-                })
-                .catch(function() {
-                    if (msgDiv) {
-                        msgDiv.className = 'skyhshoso-message skyhshoso-message-error';
-                        msgDiv.innerHTML = '<p>An error occurred.</p>';
-                        msgDiv.style.display = 'block';
-                    }
-                    sTxt.textContent = orig;
-                    sBtn.disabled = false;
-                });
-            });
-        }
-
-        document.addEventListener('click', function(e) {
-            var lk = e.target.closest('.skyhshoso-remove-invite');
-            if (!lk) return;
-            e.preventDefault();
-            
-            if (!confirm('Are you sure you want to remove this collaborator?')) return;
-            
-            var uid = lk.getAttribute('data-user-id');
-            var fd = new FormData();
-            fd.append('action', 'skyhshoso_remove_invite');
-            fd.append('user_id', uid);
-            fd.append('nonce', config.collaboratorNonce);
-
-            fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fd) })
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                if (d.success) refreshList();
-                else alert('Error: ' + d.data.message);
-            });
-        });
-
-        function refreshList() {
-            if (!listCont) return;
-            var fd = new FormData();
-            fd.append('action', 'skyhshoso_get_collaborator_data');
-            fd.append('nonce', config.collaboratorNonce);
-
-            fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fd) })
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                if (!d.success) return;
-                listCont.innerHTML = '';
-                var loaded = false;
-
-                if (d.data.skyhshoso_invited_users && d.data.skyhshoso_invited_users.length > 0) {
-                    loaded = true;
-                    var sec = document.createElement('div');
-                    sec.className = 'skyhshoso-collaborator-section';
-                    sec.innerHTML = '<h3 class="skyhshoso-collaborator-title">Users You Invited</h3>' +
-                                    '<div class="skyhshoso-table-wrapper skyhshoso-collaborator-table-wrapper">' +
-                                    '<table class="skyhshoso-table skyhshoso-collaborator-table">' +
-                                    '<thead><tr><th class="skyhshoso-column-name">Email</th><th class="skyhshoso-column-action">Action</th></tr></thead>' +
-                                    '<tbody></tbody></table></div>';
-                    
-                    var tb = sec.querySelector('tbody');
-                    d.data.skyhshoso_invited_users.forEach(function(u) {
-                        var r = document.createElement('tr');
-                        r.className = 'skyhshoso-collaborator-row';
-                        r.innerHTML = '<td class="skyhshoso-column-name">' + escapeHtml(u.email) + '</td>' +
-                                      '<td class="skyhshoso-column-action"><a href="#" class="skyhshoso-action-link skyhshoso-remove-invite" data-user-id="' + u.id + '">Remove</a></td>';
-                        tb.appendChild(r);
-                    });
-                    listCont.appendChild(sec);
-                }
-
-                if (d.data.skyhshoso_invited_by && d.data.skyhshoso_invited_by.length > 0) {
-                    loaded = true;
-                    var sec2 = document.createElement('div');
-                    sec2.className = 'skyhshoso-collaborator-section';
-                    sec2.innerHTML = '<h3 class="skyhshoso-collaborator-title">Users Who Invited You</h3>' +
-                                     '<div class="skyhshoso-table-wrapper skyhshoso-collaborator-table-wrapper">' +
-                                     '<table class="skyhshoso-table skyhshoso-collaborator-table">' +
-                                     '<thead><tr><th class="skyhshoso-column-name">Email</th><th class="skyhshoso-column-action">Action</th></tr></thead>' +
-                                     '<tbody></tbody></table></div>';
-                    
-                    var tb2 = sec2.querySelector('tbody');
-                    d.data.skyhshoso_invited_by.forEach(function(u) {
-                        var r2 = document.createElement('tr');
-                        r2.className = 'skyhshoso-collaborator-row';
-                        r2.innerHTML = '<td class="skyhshoso-column-name">' + escapeHtml(u.email) + '</td>' +
-                                       '<td class="skyhshoso-column-action"><a href="#" class="skyhshoso-action-link skyhshoso-remove-invite" data-user-id="' + u.id + '">Remove</a></td>';
-                        tb2.appendChild(r2);
-                    });
-                    listCont.appendChild(sec2);
-                }
-
-                if (!loaded) {
-                    listCont.innerHTML = '<div class="skyhshoso-empty-message">No collaborators found. Click "Invite User" to add a collaborator.</div>';
-                }
-            });
-        }
-    }
-
-    function initSubscriptionSwitcher() {
-        var containers = document.querySelectorAll('.skyhshoso-switch-container');
-        if (!containers.length) return;
-
-        containers.forEach(function(container) {
-            var subId     = container.getAttribute('data-subscription-id');
-            var select    = container.querySelector('.skyhshoso-switch-select');
-            var switchBtn = container.querySelector('.skyhshoso-switch-btn');
-            var btnText   = container.querySelector('.skyhshoso-switch-btn-text');
-            var spinner   = container.querySelector('.skyhshoso-switch-spinner');
-            var msgDiv    = container.querySelector('.skyhshoso-switch-message');
-
-            if (!select || !switchBtn) return;
-
-            var currentOption = select.querySelector('option[data-current="1"]');
-            var currentValue  = currentOption ? currentOption.value : select.value;
-
-            select.addEventListener('change', function() {
-                if (this.value !== currentValue) {
-                    switchBtn.style.display = 'inline-flex';
-                    if (msgDiv) {
-                        msgDiv.style.display = 'none';
-                        msgDiv.innerHTML = '';
-                    }
-                } else {
-                    switchBtn.style.display = 'none';
-                }
-            });
-
-            switchBtn.addEventListener('click', function() {
-                var newVariationId = select.value;
-                if (newVariationId === currentValue) return;
-
-                btnText.style.display = 'none';
-                spinner.style.display = 'inline-block';
-                switchBtn.disabled = true;
-                select.disabled = true;
-
-                var fd = new FormData();
-                fd.append('action', 'skyhshoso_switch_to_cart');
-                fd.append('subscription_id', subId);
-                fd.append('new_variation_id', newVariationId);
-                fd.append('nonce', config.switchNonce);
-
-                fetch(config.ajaxUrl, {
-                    method: 'POST',
-                    body: new URLSearchParams(fd)
-                })
-                .then(function(r) { return r.json(); })
-                .then(function(d) {
-                    if (d.success && d.data.checkout_url) {
-                        window.location.href = d.data.checkout_url;
-                    } else {
-                        spinner.style.display = 'none';
-                        btnText.style.display = 'inline';
-                        switchBtn.disabled = false;
-                        select.disabled = false;
-
-                        var errMsg = (d.data && d.data.message) || 'Unknown error from server.';
-                        if (msgDiv) {
-                            msgDiv.className = 'skyhshoso-switch-message skyhshoso-switch-error';
-                            msgDiv.innerHTML = errMsg;
-                            msgDiv.style.display = 'block';
-                        }
-                    }
-                })
-                .catch(function(err) {
-                    spinner.style.display = 'none';
-                    btnText.style.display = 'inline';
-                    switchBtn.disabled = false;
-                    select.disabled = false;
-
-                    if (msgDiv) {
-                        msgDiv.className = 'skyhshoso-switch-message skyhshoso-switch-error';
-                        msgDiv.innerHTML = 'Connection error: ' + (err.message || err);
-                        msgDiv.style.display = 'block';
-                    }
-                });
-            });
-        });
-    }
-
-    function initDashboardStats() {
-        document.querySelectorAll('[id^="skyhshoso-stats-grid-"]').forEach(function(grid) {
-            var hostingId = grid.getAttribute('data-hosting-id');
-            var nonce = grid.getAttribute('data-nonce');
-            var fd = new FormData();
-            fd.append('action', 'skyhshoso_get_cpanel_stats');
-            fd.append('hosting_id', hostingId);
-            fd.append('nonce', nonce);
-            fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fd) })
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                if (!d.success) return;
-                var stats = d.data.stats || {};
-                var usage = d.data.usage || {};
-                var wpSites = stats.wordpress_sites || [];
-                var diskPct = 0;
-                if (usage && usage.disk_limit > 0) diskPct = Math.round((usage.disk_used / usage.disk_limit) * 100);
-                grid.innerHTML =
-                    '<div class="skyhshoso-stat-card"><span class="skyhshoso-stat-icon"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg></span><span class="skyhshoso-stat-value">' + (diskPct > 0 ? diskPct + '%' : '-') + '</span><span class="skyhshoso-stat-label">Disk Usage</span></div>' +
-                    '<div class="skyhshoso-stat-card"><span class="skyhshoso-stat-icon"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg></span><span class="skyhshoso-stat-value">' + (stats.email_accounts ? stats.email_accounts.length : 0) + '</span><span class="skyhshoso-stat-label">Email</span></div>' +
-                    '<div class="skyhshoso-stat-card"><span class="skyhshoso-stat-icon"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg></span><span class="skyhshoso-stat-value">' + wpSites.length + '</span><span class="skyhshoso-stat-label">WordPress</span></div>' +
-                    '<div class="skyhshoso-stat-card"><span class="skyhshoso-stat-icon"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg></span><span class="skyhshoso-stat-value">' + (stats.subdomains ? stats.subdomains.length : 0) + '</span><span class="skyhshoso-stat-label">Subdomains</span></div>' +
-                    '<div class="skyhshoso-stat-card"><span class="skyhshoso-stat-icon"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg></span><span class="skyhshoso-stat-value">' + ((stats.addon_domains ? stats.addon_domains.length : 0) + (stats.parked_domains ? stats.parked_domains.length : 0)) + '</span><span class="skyhshoso-stat-label">Addon/Parked</span></div>' +
-                    '<div class="skyhshoso-stat-card"><span class="skyhshoso-stat-icon"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg></span><span class="skyhshoso-stat-value">' + formatBytes(usage && usage.disk_limit ? usage.disk_limit : 0) + '</span><span class="skyhshoso-stat-label">Disk Limit</span></div>';
-                var statusEl = document.querySelector('.skyhshoso-cpanel-status');
-                if (statusEl) statusEl.textContent = 'Updated';
-            });
-        });
-    }
-
-    function initCpanelDashboard() {}
-
-    function formatBytes(bytes) {
-        if (!bytes || bytes === 0) return '0 B';
-        var units = ['B', 'KB', 'MB', 'GB', 'TB'];
-        var i = Math.floor(Math.log(bytes) / Math.log(1024));
-        return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + units[i];
-    }
-
-    function escapeHtml(text) {
-        if (!text) return '';
-        var div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
     }
 
     function initWpSiteProvision() {
@@ -920,7 +473,6 @@
 
         var wpProvisionNonce = typeof skyhshosoDashboard !== 'undefined' && skyhshosoDashboard.wpProvisionNonce ? skyhshosoDashboard.wpProvisionNonce : '';
         var resultEl = document.getElementById('skyhshoso-wp-provision-result');
-        var domainInput = document.getElementById('skyhshoso-wp-domain-input');
         var formView = document.getElementById('skyhshoso-wp-provision-form');
         var loadingView = document.getElementById('skyhshoso-wp-loading');
         var loadIcon = document.getElementById('skyhshoso-wp-load-icon');
@@ -930,10 +482,10 @@
         var loadMsg = document.getElementById('skyhshoso-wp-load-msg');
 
         var steps = [
-            { svg: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:26px;height:26px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" /></svg>', msg: 'Prepping Server Environment' },
-            { svg: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:26px;height:26px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.58 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.58 4 8 4s8-1.79 8-4M4 7c0-2.21 3.58-4 8-4s8 1.79 8 4m0 5c0 2.21-3.58 4-8 4s-8-1.79-8-4" /></svg>', msg: 'Assigning Network Routing' },
+            { svg: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:26px;height:26px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" /></svg>', msg: 'Prepping Application Container' },
+            { svg: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:26px;height:26px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.58 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.58 4 8 4s8-1.79 8-4M4 7c0-2.21 3.58-4 8-4s8 1.79 8 4m0 5c0 2.21-3.58 4-8 4s-8-1.79-8-4" /></svg>', msg: 'Isolating Network Routing' },
             { svg: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:26px;height:26px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>', msg: 'Sweeping Default Files' },
-            { svg: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:26px;height:26px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>', msg: 'Finalizing setup...' }
+            { svg: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:26px;height:26px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>', msg: 'Finalizing secure setup...' }
         ];
 
         provisionBtn.addEventListener('click', function() {
@@ -955,6 +507,9 @@
                 if (resultEl) resultEl.innerHTML = '<p style="color:#d63638;font-size:13px;">Please enter a domain.</p>';
                 return;
             }
+			// Capture the chosen Plugin Set ID
+            var setSelect = document.getElementById('skyhshoso-wp-plugin-set');
+            var pluginSetId = setSelect ? setSelect.value : '0';
 
             if (formView) formView.style.display = 'none';
             if (loadingView) loadingView.style.display = 'flex';
@@ -976,7 +531,6 @@
                 }, 250);
             }
 
-            // Fixed the Infinite Loop
             stepInterval = setInterval(function() {
                 if (stepIndex < steps.length - 1) {
                     stepIndex++;
@@ -997,7 +551,7 @@
                             loadCheck.style.display = 'flex';
                             loadCheck.classList.remove('skyhshoso-wp-fading');
                         }
-                        if (loadTitle) loadTitle.textContent = 'Ready for Installation!';
+                        if (loadTitle) loadTitle.textContent = 'Container Ready!';
                         if (loadMsg) {
                             loadMsg.innerHTML = serverMessage || 'Your domain environment is ready.';
                             loadMsg.style.opacity = '1';
@@ -1028,7 +582,7 @@
                 loadMsg.appendChild(btnWrap);
             }
 
-            var params = 'action=skyhshoso_wp_provision&wp_site_id=' + encodeURIComponent(wpSiteId) + '&domain=' + encodeURIComponent(domain) + '&nonce=' + encodeURIComponent(wpProvisionNonce);
+            var params = 'action=skyhshoso_wp_provision&wp_site_id=' + encodeURIComponent(wpSiteId) + '&domain=' + encodeURIComponent(domain) + '&plugin_set=' + encodeURIComponent(pluginSetId) + '&nonce=' + encodeURIComponent(wpProvisionNonce);
 
             var xhr = new XMLHttpRequest();
             xhr.open('POST', config.ajaxUrl, true);
@@ -1052,92 +606,165 @@
         });
     }
 
-    function initWpPasswordToggle() {
-        var toggleBtn = document.getElementById('skyhshoso-wp-pass-toggle');
-        var passDisplay = document.getElementById('skyhshoso-wp-pass-display');
-        var copyBtn = document.getElementById('skyhshoso-wp-pass-copy');
-        if (!toggleBtn || !passDisplay) return;
+    function setupPagination(cfg) {
+        var container = document.getElementById(cfg.paginationContainerId);
+        var tbody = cfg.tbodyId ? document.getElementById(cfg.tbodyId) : null;
+        var input = document.getElementById(cfg.searchInputId);
+        
+        if (!container || !tbody) return;
 
-        toggleBtn.addEventListener('click', function() {
-            var pass = this.getAttribute('data-pass');
-            var visible = this.getAttribute('data-visible') === '1';
-            if (visible) {
-                passDisplay.innerHTML = '&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;';
-                this.setAttribute('data-visible', '0');
-            } else {
-                passDisplay.textContent = pass;
-                this.setAttribute('data-visible', '1');
-            }
-        });
+        var totalPages = parseInt(container.getAttribute('data-total-pages')) || 1;
+        var currentPage = parseInt(container.getAttribute('data-current-page')) || 1;
+        var searchTerm = '';
 
-        if (copyBtn) {
-            copyBtn.addEventListener('click', function() {
-                var pass = this.getAttribute('data-pass');
-                if (!pass) return;
-                if (navigator.clipboard) {
-                    navigator.clipboard.writeText(pass).then(function() { showCopied(copyBtn); });
-                } else {
-                    var ta = document.createElement('textarea');
-                    ta.value = pass;
-                    ta.style.position = 'fixed';
-                    ta.style.left = '-9999px';
-                    document.body.appendChild(ta);
-                    ta.select();
-                    try { document.execCommand('copy'); showCopied(copyBtn); } catch(e) {}
-                    document.body.removeChild(ta);
+        function fetchPage(page, search) {
+            var fd = new FormData();
+            fd.append('action', cfg.ajaxAction);
+            fd.append('paged', page);
+            fd.append('search', search);
+            fd.append('nonce', config.dashboardNonce);
+
+            fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fd) })
+            .then(r => r.json())
+            .then(d => {
+                if (d.success) {
+                    tbody.innerHTML = d.data.html;
+                    currentPage = d.data.current_page;
+                    totalPages = d.data.total_pages;
+                    
+                    if (d.data.hosting_queue && typeof window.skyhshosoProcessAsyncFleetScan === 'function') {
+                        window.skyhshosoProcessAsyncFleetScan(d.data.hosting_queue);
+                    }
                 }
             });
         }
+        
+        if (cfg.autoFetch) fetchPage(1, '');
+    }
+	
+	// --- TWO-WAY SERVER MANAGEMENT ---
+    function initAccountManagement() {
+        document.addEventListener('click', function(e) {
 
-        function showCopied(btn) {
-            var orig = btn.innerHTML;
-            btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:14px;height:14px;vertical-align:middle;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>';
-            setTimeout(function() { btn.innerHTML = orig; }, 1500);
-        }
+            // 1. Sync Account
+            var syncBtn = e.target.closest('.skyhs-sync-btn');
+            if (syncBtn) {
+                e.preventDefault();
+                var origHtml = syncBtn.innerHTML;
+                syncBtn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;"></span>';
+                syncBtn.disabled = true;
+
+                var fd = new FormData();
+                fd.append('action', 'skyhshoso_sync_account');
+                fd.append('hosting_id', syncBtn.getAttribute('data-hosting-id'));
+                fd.append('nonce', config.dashboardNonce);
+
+                fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fd) })
+                .then(r => r.json()).then(d => {
+                    syncBtn.disabled = false;
+                    syncBtn.innerHTML = origHtml;
+                    if (d.success) {
+                        window.skyhshosoToast(d.data.message, 'success');
+                        setTimeout(() => window.location.reload(), 1500); // Reload to show updated stats
+                    } else {
+                        window.skyhshosoToast(d.data.message, 'error');
+                    }
+                });
+            }
+
+            // 2. Toggle Suspend/Unsuspend
+            var toggleBtn = e.target.closest('.skyhs-toggle-btn');
+            if (toggleBtn) {
+                e.preventDefault();
+                var action = toggleBtn.getAttribute('data-action');
+                var confirmMsg = action === 'suspend' 
+                    ? 'Are you sure you want to suspend this account? All websites on this account will go offline.' 
+                    : 'Are you sure you want to reactivate this account?';
+                
+                if (!confirm(confirmMsg)) return;
+
+                var origHtml = toggleBtn.innerHTML;
+                toggleBtn.innerHTML = 'Processing...';
+                toggleBtn.disabled = true;
+
+                var fd = new FormData();
+                fd.append('action', 'skyhshoso_toggle_suspend');
+                fd.append('hosting_id', toggleBtn.getAttribute('data-hosting-id'));
+                fd.append('status_action', action);
+                fd.append('nonce', config.dashboardNonce);
+
+                fetch(config.ajaxUrl, { method: 'POST', body: newSearchParams(fd) })
+                .then(r => r.json()).then(d => {
+                    if (d.success) {
+                        window.skyhshosoToast(d.data.message, 'success');
+                        setTimeout(() => window.location.reload(), 1500);
+                    } else {
+                        toggleBtn.disabled = false;
+                        toggleBtn.innerHTML = origHtml;
+                        window.skyhshosoToast(d.data.message, 'error');
+                    }
+                });
+            }
+
+            // 3. Terminate Account
+            var terminateBtn = e.target.closest('.skyhs-terminate-btn');
+            if (terminateBtn) {
+                e.preventDefault();
+                var text1 = "DANGER: Are you sure you want to permanently delete this account?";
+                var text2 = "This will permanently destroy all files, databases, and emails on the server. Your subscription will be cancelled immediately. This cannot be undone.\n\nType 'DELETE' to confirm:";
+                
+                if (!confirm(text1)) return;
+                var verify = prompt(text2);
+                if (verify !== 'DELETE') {
+                    window.skyhshosoToast('Termination cancelled.', 'success');
+                    return;
+                }
+
+                var origHtml = terminateBtn.innerHTML;
+                terminateBtn.innerHTML = 'Terminating...';
+                terminateBtn.disabled = true;
+
+                var fd = new FormData();
+                fd.append('action', 'skyhshoso_terminate_account');
+                fd.append('hosting_id', terminateBtn.getAttribute('data-hosting-id'));
+                fd.append('nonce', config.dashboardNonce);
+
+                fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fd) })
+                .then(r => r.json()).then(d => {
+                    if (d.success) {
+                        window.skyhshosoToast(d.data.message, 'success');
+                        var row = terminateBtn.closest('tr');
+                        if (row) {
+                            row.style.opacity = '0.3';
+                            row.style.pointerEvents = 'none';
+                        }
+                        setTimeout(() => window.location.reload(), 2000);
+                    } else {
+                        terminateBtn.disabled = false;
+                        terminateBtn.innerHTML = origHtml;
+                        window.skyhshosoToast(d.data.message, 'error');
+                    }
+                });
+            }
+        });
     }
 
     function init() {
+        injectModernStyles(); // Inject CSS for Toasts & Skeletons
         initRedirect();
-        initSearchInputs();
         initCPanelLogin();
-        initCollaborators();
-        initSubscriptionSwitcher();
-        initDashboardStats();
-        initCpanelDashboard();
         initWpSiteProvision();
-        initWpPasswordToggle();
         initWpSiteScanner(); 
-        
-        setupPagination({
-            paginationContainerId: 'skyhshoso-hosting-pagination',
-            tbodyId: 'skyhshoso-hosting-tbody',
-            searchInputId: 'skyhshoso-hosting-search',
-            noResultsId: 'skyhshoso-hosting-no-results',
-            tableId: 'skyhshoso-hosting-table',
-            ajaxAction: 'skyhshoso_get_hosting_page'
-        });
-
-        setupPagination({
-            paginationContainerId: 'skyhshoso-domain-pagination',
-            tbodyId: 'skyhshoso-domain-tbody',
-            searchInputId: 'skyhshoso-domain-search',
-            noResultsId: 'skyhshoso-domain-no-results',
-            tableId: 'skyhshoso-domain-table',
-            ajaxAction: 'skyhshoso_get_domain_page'
-        });
+		initAccountManagement();
 
         if (document.getElementById('skyhshoso-wp-site-pagination')) {
             setupPagination({
                 paginationContainerId: 'skyhshoso-wp-site-pagination',
                 tbodyId: 'skyhshoso-wp-site-tbody',
-                tableId: 'skyhshoso-wp-site-table',
                 ajaxAction: 'skyhshoso_get_wp_site_page',
                 autoFetch: true
             });
         }
-        
-        initPeriodToggle();
-        initAddDomainForm();
     }
 
     if (document.readyState === 'loading') {

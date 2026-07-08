@@ -762,7 +762,7 @@ class SkyHSHOSO_Dashboard_Shortcode {
                                 <th class="skyhshoso-column-plan"><?php esc_html_e( 'Hosting Plan', 'skyhs-hosting-solution' ); ?></th>
                                 <th class="skyhshoso-column-domain"><?php esc_html_e( 'Domain', 'skyhs-hosting-solution' ); ?></th>
                                 <th class="skyhshoso-column-status"><?php esc_html_e( 'Status', 'skyhs-hosting-solution' ); ?></th>
-                                <th class="skyhshoso-column-action"><?php esc_html_e( 'Action', 'skyhs-hosting-solution' ); ?></th>
+                                <th class="skyhshoso-column-action" style="text-align: right;"><?php esc_html_e( 'Actions', 'skyhs-hosting-solution' ); ?></th>
                             </tr>
                         </thead>
                         <tbody id="skyhshoso-hosting-tbody">
@@ -785,6 +785,11 @@ class SkyHSHOSO_Dashboard_Shortcode {
                                         }
                                     }
                                 }
+                                
+                                $acct_stat = get_post_meta($hosting_id, 'skyhshoso_account_status', true) ?: 'active';
+                                $t_act = ($acct_stat === 'suspended') ? 'unsuspend' : 'suspend';
+                                $t_col = ($acct_stat === 'suspended') ? '#10b981' : '#f59e0b';
+                                $t_lbl = ($acct_stat === 'suspended') ? __('Unsuspend', 'skyhs-hosting-solution') : __('Suspend', 'skyhs-hosting-solution');
 
                                 $display_status = str_replace( '-', ' ', $subscription_status );
                                 $display_status = ucwords( $display_status );
@@ -795,18 +800,37 @@ class SkyHSHOSO_Dashboard_Shortcode {
                                     <td class="skyhshoso-column-plan"><?php the_title(); ?></td>
                                     <td class="skyhshoso-column-domain"><?php echo esc_html( $domain_display ); ?></td>
                                     <td class="skyhshoso-column-status">
-                                        <span class="skyhshoso-status-btn <?php echo esc_attr( $status_class ); ?>">
-                                            <span class="truncate"><?php echo esc_html( $display_status ); ?></span>
-                                        </span>
+                                        <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-start;">
+                                            <span class="skyhshoso-status-btn <?php echo esc_attr( $status_class ); ?>" style="margin:0;">
+                                                <span class="truncate"><?php echo esc_html( $display_status ); ?></span>
+                                            </span>
+                                            <?php if ( $acct_stat === 'suspended' ) : ?>
+                                                <span style="font-size:10px; font-weight:700; color:#b45309; background:#fef3c7; padding:2px 6px; border-radius:4px; text-transform:uppercase; letter-spacing:0.5px;"><?php esc_html_e( 'Server Suspended', 'skyhs-hosting-solution' ); ?></span>
+                                            <?php endif; ?>
+                                        </div>
                                     </td>
-                                    <td class="skyhshoso-column-action">
-                                        <?php if ( in_array( $subscription_status, array( 'active', 'pending-cancel' ), true ) ) : ?>
-                                            <a href="<?php echo esc_url( add_query_arg( array( 'tab' => 'skyhshoso_hosting', 'hosting_id' => $hosting_id ), self::get_base_url() ) ); ?>" class="skyhshoso-action-link">
-                                                <?php esc_html_e( 'Manage', 'skyhs-hosting-solution' ); ?>
-                                            </a>
-                                        <?php else : ?>
-                                            <span class="skyhshoso-action-disabled" style="color:#999;font-size:14px;"><?php echo esc_html( $display_status ); ?></span>
-                                        <?php endif; ?>
+                                    <td class="skyhshoso-column-action" style="text-align:right;">
+                                        <div style="display:flex; gap:8px; align-items:center; justify-content:flex-end;">
+                                            <?php if ( in_array( $subscription_status, array( 'active', 'pending-cancel' ), true ) ) : ?>
+                                                <a href="<?php echo esc_url( add_query_arg( array( 'tab' => 'skyhshoso_hosting', 'hosting_id' => $hosting_id ), self::get_base_url() ) ); ?>" class="skyhshoso-button skyhshoso-button-primary" style="padding:6px 12px; font-size:12px; text-decoration:none;">
+                                                    <?php esc_html_e( 'Manage', 'skyhs-hosting-solution' ); ?>
+                                                </a>
+                                            <?php else : ?>
+                                                <span class="skyhshoso-action-disabled" style="color:#999;font-size:13px; font-weight:500;"><?php echo esc_html( $display_status ); ?></span>
+                                            <?php endif; ?>
+                                            
+                                            <button class="skyhshoso-button skyhs-sync-btn" data-hosting-id="<?php echo esc_attr( $hosting_id ); ?>" style="background:#f1f5f9; color:#475569; padding:6px 10px; border:1px solid #e2e8f0; font-size:12px; cursor:pointer;" title="<?php esc_attr_e( 'Sync Server Status', 'skyhs-hosting-solution' ); ?>">
+                                                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                                            </button>
+
+                                            <button class="skyhshoso-button skyhs-toggle-btn" data-hosting-id="<?php echo esc_attr( $hosting_id ); ?>" data-action="<?php echo esc_attr( $t_act ); ?>" style="background:<?php echo $t_col; ?>; color:#fff; padding:6px 12px; font-size:12px; border:none; cursor:pointer;">
+                                                <?php echo esc_html( $t_lbl ); ?>
+                                            </button>
+
+                                            <button class="skyhshoso-button skyhs-terminate-btn" data-hosting-id="<?php echo esc_attr( $hosting_id ); ?>" style="background:#ef4444; color:#fff; padding:6px 10px; font-size:12px; border:none; cursor:pointer;" title="<?php esc_attr_e( 'Delete Account', 'skyhs-hosting-solution' ); ?>">
+                                                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                                 <?php
@@ -880,16 +904,35 @@ class SkyHSHOSO_Dashboard_Shortcode {
                 }
             }
         }
+        
+        $account_status = get_post_meta($hosting_id, 'skyhshoso_account_status', true) ?: 'active';
+        $t_act = ($account_status === 'suspended') ? 'unsuspend' : 'suspend';
+        $t_col = ($account_status === 'suspended') ? '#10b981' : '#f59e0b';
+        $t_lbl = ($account_status === 'suspended') ? __('Unsuspend', 'skyhs-hosting-solution') : __('Suspend', 'skyhs-hosting-solution');
         ?>
 
-        <div class="skyhshoso-hosting-header" style="justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 16px; margin-bottom: 24px;">
+        <div class="skyhshoso-hosting-header" style="justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #e2e8f0; padding-bottom: 16px; margin-bottom: 24px;">
             <div>
                 <h2 style="margin:0; font-size:24px; font-weight:700; color:#0f172a;"><?php echo esc_html($hosting_domain); ?></h2>
-                <span class="skyhshoso-status-btn <?php echo esc_attr($status_class); ?>" style="margin-top:8px; display:inline-block;"><?php echo esc_html($display_status); ?></span>
+                <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
+                    <span class="skyhshoso-status-btn <?php echo esc_attr($status_class); ?>" style="margin:0;"><?php echo esc_html($display_status); ?></span>
+                    <?php if ($account_status === 'suspended') : ?>
+                        <span style="font-size:11px; font-weight:700; color:#b45309; background:#fef3c7; padding:4px 8px; border-radius:4px; text-transform:uppercase; letter-spacing:0.5px;">Server Suspended</span>
+                    <?php endif; ?>
+                </div>
             </div>
-            <a href="<?php echo esc_url( add_query_arg( 'tab', 'skyhshoso_hosting', self::get_base_url() ) ); ?>" class="skyhshoso-button skyhshoso-button-secondary">
-                <span class="skyhshoso-button-text">&larr; <?php esc_html_e('Back to List', 'skyhs-hosting-solution'); ?></span>
-            </a>
+            <div style="display:flex; flex-direction:column; align-items:flex-end; gap:12px;">
+                <a href="<?php echo esc_url( add_query_arg( 'tab', 'skyhshoso_hosting', self::get_base_url() ) ); ?>" class="skyhshoso-button skyhshoso-button-secondary">
+                    <span class="skyhshoso-button-text">&larr; <?php esc_html_e('Back to List', 'skyhs-hosting-solution'); ?></span>
+                </a>
+                <div style="display:flex; gap:8px;">
+                    <button class="skyhshoso-button skyhs-sync-btn" data-hosting-id="<?php echo esc_attr($hosting_id); ?>" style="background:#f1f5f9; color:#475569; padding:6px 12px; border:1px solid #e2e8f0; font-size:12px;" title="<?php esc_attr_e( 'Sync Server Status', 'skyhs-hosting-solution' ); ?>">
+                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin-right:4px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> <?php esc_html_e('Sync', 'skyhs-hosting-solution'); ?>
+                    </button>
+                    <button class="skyhshoso-button skyhs-toggle-btn" data-hosting-id="<?php echo esc_attr($hosting_id); ?>" data-action="<?php echo esc_attr($t_act); ?>" style="background:<?php echo $t_col; ?>; color:#fff; padding:6px 12px; font-size:12px; border:none;"><?php echo esc_html($t_lbl); ?></button>
+                    <button class="skyhshoso-button skyhs-terminate-btn" data-hosting-id="<?php echo esc_attr($hosting_id); ?>" style="background:#ef4444; color:#fff; padding:6px 12px; font-size:12px; border:none;"><?php esc_html_e('Delete', 'skyhs-hosting-solution'); ?></button>
+                </div>
+            </div>
         </div>
 
         <?php if (!$is_active) : ?>
@@ -974,6 +1017,29 @@ class SkyHSHOSO_Dashboard_Shortcode {
                         <button type="button" class="skyhshoso-button skyhshoso-button-secondary" onclick="document.getElementById('skyhshoso-wp-install-modal').style.display='flex';">
                             <svg style="width:16px; height:16px; margin-right:4px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg> Install New
                         </button>
+						<?php
+						// Retrieve the synced sets from the plugin settings
+						$options = get_option('skyhshoso_settings_group', array());
+						$allowed_ids = isset($options['wpt_frontend_sets']) ? (array) $options['wpt_frontend_sets'] : array();
+						$sets_cache = isset($options['wpt_sets_cache']) ? json_decode($options['wpt_sets_cache'], true) : array();
+						?>
+
+						<div class="skyhshoso-wizard-form-group">
+							<label style="font-weight:600; display:block; margin-bottom:8px;">Website Purpose</label>
+							<select id="skyhshoso-wp-plugin-set" style="width:100%; padding:8px; border-radius:6px; border:1px solid #dcdcde;">
+								<option value="0">Clean Install (No Extra Plugins)</option>
+								<?php 
+								// Dynamically output only the Sets you checked in the admin panel!
+								if (!empty($sets_cache) && is_array($sets_cache)) {
+									foreach ($sets_cache as $set) {
+										if (in_array($set['id'], $allowed_ids)) {
+											echo '<option value="' . esc_attr($set['id']) . '">' . esc_html($set['name']) . '</option>';
+										}
+									}
+								}
+								?>
+							</select>
+						</div>
                     </div>
                     <div id="skyhshoso-wp-message-<?php echo esc_attr($hosting_id); ?>" style="margin-top: 10px; font-size: 13px;"></div>
                 </div>
@@ -2255,6 +2321,11 @@ class SkyHSHOSO_Dashboard_Shortcode {
                         }
                     }
                 }
+                
+                $acct_stat = get_post_meta($hosting_id, 'skyhshoso_account_status', true) ?: 'active';
+                $t_act = ($acct_stat === 'suspended') ? 'unsuspend' : 'suspend';
+                $t_col = ($acct_stat === 'suspended') ? '#10b981' : '#f59e0b';
+                $t_lbl = ($acct_stat === 'suspended') ? __('Unsuspend', 'skyhs-hosting-solution') : __('Suspend', 'skyhs-hosting-solution');
 
                 $display_status = str_replace( '-', ' ', $subscription_status );
                 $display_status = ucwords( $display_status );
@@ -2265,18 +2336,37 @@ class SkyHSHOSO_Dashboard_Shortcode {
                     <td class="skyhshoso-column-plan"><?php the_title(); ?></td>
                     <td class="skyhshoso-column-domain"><?php echo esc_html( $domain_display ); ?></td>
                     <td class="skyhshoso-column-status">
-                        <span class="skyhshoso-status-btn <?php echo esc_attr( $status_class ); ?>">
-                            <span class="truncate"><?php echo esc_html( $display_status ); ?></span>
-                        </span>
+                        <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-start;">
+                            <span class="skyhshoso-status-btn <?php echo esc_attr( $status_class ); ?>" style="margin:0;">
+                                <span class="truncate"><?php echo esc_html( $display_status ); ?></span>
+                            </span>
+                            <?php if ( $acct_stat === 'suspended' ) : ?>
+                                <span style="font-size:10px; font-weight:700; color:#b45309; background:#fef3c7; padding:2px 6px; border-radius:4px; text-transform:uppercase; letter-spacing:0.5px;"><?php esc_html_e( 'Server Suspended', 'skyhs-hosting-solution' ); ?></span>
+                            <?php endif; ?>
+                        </div>
                     </td>
-                    <td class="skyhshoso-column-action">
-                        <?php if ( in_array( $subscription_status, array( 'active', 'pending-cancel' ), true ) ) : ?>
-                            <a href="<?php echo esc_url( add_query_arg( array( 'tab' => 'skyhshoso_hosting', 'hosting_id' => $hosting_id ), $base_url ) ); ?>" class="skyhshoso-action-link">
-                                <?php esc_html_e( 'Manage', 'skyhs-hosting-solution' ); ?>
-                            </a>
-                        <?php else : ?>
-                            <span class="skyhshoso-action-disabled" style="color:#999;font-size:14px;"><?php echo esc_html( $display_status ); ?></span>
-                        <?php endif; ?>
+                    <td class="skyhshoso-column-action" style="text-align:right;">
+                        <div style="display:flex; gap:8px; align-items:center; justify-content:flex-end;">
+                            <?php if ( in_array( $subscription_status, array( 'active', 'pending-cancel' ), true ) ) : ?>
+                                <a href="<?php echo esc_url( add_query_arg( array( 'tab' => 'skyhshoso_hosting', 'hosting_id' => $hosting_id ), $base_url ) ); ?>" class="skyhshoso-button skyhshoso-button-primary" style="padding:6px 12px; font-size:12px; text-decoration:none;">
+                                    <?php esc_html_e( 'Manage', 'skyhs-hosting-solution' ); ?>
+                                </a>
+                            <?php else : ?>
+                                <span class="skyhshoso-action-disabled" style="color:#999;font-size:13px; font-weight:500;"><?php echo esc_html( $display_status ); ?></span>
+                            <?php endif; ?>
+                            
+                            <button class="skyhshoso-button skyhs-sync-btn" data-hosting-id="<?php echo esc_attr( $hosting_id ); ?>" style="background:#f1f5f9; color:#475569; padding:6px 10px; border:1px solid #e2e8f0; font-size:12px; cursor:pointer;" title="<?php esc_attr_e( 'Sync Server Status', 'skyhs-hosting-solution' ); ?>">
+                                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                            </button>
+
+                            <button class="skyhshoso-button skyhs-toggle-btn" data-hosting-id="<?php echo esc_attr( $hosting_id ); ?>" data-action="<?php echo esc_attr( $t_act ); ?>" style="background:<?php echo $t_col; ?>; color:#fff; padding:6px 12px; font-size:12px; border:none; cursor:pointer;">
+                                <?php echo esc_html( $t_lbl ); ?>
+                            </button>
+
+                            <button class="skyhshoso-button skyhs-terminate-btn" data-hosting-id="<?php echo esc_attr( $hosting_id ); ?>" style="background:#ef4444; color:#fff; padding:6px 10px; font-size:12px; border:none; cursor:pointer;" title="<?php esc_attr_e( 'Delete Account', 'skyhs-hosting-solution' ); ?>">
+                                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            </button>
+                        </div>
                     </td>
                 </tr>
                 <?php

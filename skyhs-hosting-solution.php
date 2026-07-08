@@ -768,9 +768,8 @@ function skyhshoso_hosting_solution_deactivate() {
 }
 register_deactivation_hook( __FILE__, 'skyhshoso_hosting_solution_deactivate' );
 
-// Load plugin textdomain before any __() calls to avoid the
-// "just in time" loading notice in WordPress 6.7+.
+// Load translations safely on the 'init' hook for WordPress 6.7+ compatibility
+add_action( 'init', 'skyhshoso_load_textdomain' );
 function skyhshoso_load_textdomain() {
     load_plugin_textdomain( 'skyhs-hosting-solution', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
 }
-add_action( 'after_setup_theme', 'skyhshoso_load_textdomain', 0 );
