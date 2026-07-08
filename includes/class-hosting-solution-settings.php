@@ -1212,11 +1212,10 @@ class SkyHSHOSO_Settings {
                 $default_engine = !empty($enabled_engines) ? $enabled_engines[0] : 'none';
             }
 
-            // Centralized list of supported engines
+            // Centralized list of supported remote REST engines
             $all_engines = array(
-                'wptoolkit'    => 'WP Toolkit (Recommended)',
-                'softaculous'  => 'Softaculous',
-                'installatron' => 'Installatron'
+                'wptoolkit'    => 'WP Toolkit (Native REST API)',
+                'none'         => 'None (Manual cPanel Setup)'
             );
             ?>
             <div class="skyhshoso-wizard-form-group" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #dcdcde;">

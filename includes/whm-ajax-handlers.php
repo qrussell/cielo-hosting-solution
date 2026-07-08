@@ -146,99 +146,112 @@ function skyhshoso_wp_provision_callback() {
         ]);
     }
 	// ---------------------------------------------------------
-        // PHASE 2.5: UNIVERSAL AUTO-INSTALLER ROUTER
-        // ---------------------------------------------------------
-        $wp_admin_user = 'admin_' . rand(1000, 9999);
-        $wp_admin_pass = wp_generate_password(16, true, true);
-        $wp_admin_email = 'hello@' . $clean_domain;
+	// PHASE 2.5: UNIVERSAL AUTO-INSTALLER ROUTER
+	// ---------------------------------------------------------
+	$wp_admin_user = 'admin_' . rand(1000, 9999);
+	$wp_admin_pass = wp_generate_password(16, true, true);
+	$wp_admin_email = 'hello@' . $clean_domain;
 
-        $options = get_option('skyhshoso_settings_group', array());
-        $installer_engine = isset($options['wp_installer_engine']) ? $options['wp_installer_engine'] : 'wptoolkit';
-        $plugin_set_id = isset($_POST['plugin_set']) ? absint($_POST['plugin_set']) : 0;
+	$options = get_option('skyhshoso_settings_group', array());
+	
+	$installer_engine = isset($_POST['installer_engine']) && !empty($_POST['installer_engine']) 
+		? sanitize_text_field($_POST['installer_engine']) 
+		: (isset($options['wp_default_installer_engine']) ? $options['wp_default_installer_engine'] : 'wptoolkit');
+		
+	$plugin_set_id = isset($_POST['plugin_set']) ? absint($_POST['plugin_set']) : 0;
 
-        $whm_host_domain = parse_url($whm_api_host, PHP_URL_HOST) ?: $whm_api_host;
-        $whm_host_domain = preg_replace('/:\d+$/', '', $whm_host_domain);
+	$whm_host_domain = parse_url($whm_api_host, PHP_URL_HOST) ?: $whm_api_host;
+	$whm_host_domain = preg_replace('/:\d+$/', '', $whm_host_domain);
 
-        sleep(2); // Breathing room for WHM to register the new domain
+	sleep(2); // Breathing room for WHM to register the new domain
 
-        if ($installer_engine === 'wptoolkit') {
-            // --- WP TOOLKIT LOGIC ---
-            $wpt_api_url = "https://{$whm_host_domain}:2087/cgi/wpt/index.php/v1/installations";
-            $wpt_payload = [
-                'domain'           => $clean_domain,
-                'installationPath' => '', 
-                'title'            => 'New WordPress Site',
-                'language'         => 'en_US',
-                'protocol'         => 'https',
-                'admin'            => [
-                    'login'    => $wp_admin_user,
-                    'password' => $wp_admin_pass,
-                    'email'    => $wp_admin_email
-                ]
-            ];
-            if ($plugin_set_id > 0) $wpt_payload['set'] = $plugin_set_id;
+	if ($installer_engine === 'wptoolkit') {
+		// --- WP TOOLKIT LOGIC ---
+		$wpt_api_url = "https://{$whm_host_domain}:2087/cgi/wpt/index.php/v1/installations";
+		$wpt_payload = [
+			'domain'           => $clean_domain,
+			'installationPath' => '', 
+			'title'            => 'New WordPress Site',
+			'language'         => 'en_US',
+			'protocol'         => 'https',
+			'admin'            => [
+				'login'    => $wp_admin_user,
+				'password' => $wp_admin_pass,
+				'email'    => $wp_admin_email
+			]
+		];
+		if ($plugin_set_id > 0) $wpt_payload['set'] = $plugin_set_id;
 
-            $ch = curl_init();
-            curl_setopt($ch, CURLOPT_URL, $wpt_api_url);
-            curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($wpt_payload));
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'Authorization: whm root:' . $whm_api_token, 
-                'Content-Type: application/json',
-                'Accept: application/json'
-            ]);
-            $response = curl_exec($ch);
-            $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
+		$ch = curl_init();
+		curl_setopt($ch, CURLOPT_URL, $wpt_api_url);
+		curl_setopt($ch, CURLOPT_POST, true);
+		curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($wpt_payload));
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+		curl_setopt($ch, CURLOPT_HTTPHEADER, [
+			'Authorization: whm root:' . $whm_api_token, 
+			'Content-Type: application/json',
+			'Accept: application/json'
+		]);
+		$response = curl_exec($ch);
+		$status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+		curl_close($ch);
 
-            if ($status !== 200 && $status !== 201 && $status !== 202 && class_exists('SkyHSHOSO_Logger')) {
-                SkyHSHOSO_Logger::error('WP Toolkit Auto-Install Failed. Status: '.$status.'. Response: ' . $response);
-            }
+		if ($status !== 200 && $status !== 201 && $status !== 202 && class_exists('SkyHSHOSO_Logger')) {
+			SkyHSHOSO_Logger::error('WP Toolkit Install Failed. Status: '.$status.'. Response: ' . $response);
+		}
 
-        } elseif ($installer_engine === 'softaculous') {
-            // --- SOFTACULOUS LOGIC ---
-            // Softaculous uses WHM API 1 to trigger installations via CLI script 26 (WordPress)
-            $soft_payload = [
-                'api.version' => '1',
-                'user'        => $whm_username,
-                'script'      => '26', // Softaculous ID for WordPress
-                'domain'      => $clean_domain,
-                'softdomain'  => $clean_domain,
-                'softdirectory'=> '',
-                'admin_username'=> $wp_admin_user,
-                'admin_pass'  => $wp_admin_pass,
-                'admin_email' => $wp_admin_email,
-                'site_name'   => 'New WordPress Site',
-            ];
-            // Send payload to Softaculous API via WHM Root Call
-            $res = $whm_api->call('softaculous', $soft_payload);
-            
-            if (isset($res['metadata']['result']) && $res['metadata']['result'] != 1 && class_exists('SkyHSHOSO_Logger')) {
-                SkyHSHOSO_Logger::error('Softaculous Install Failed: ' . json_encode($res));
-            }
+	} elseif ($installer_engine === 'installatron') {
+		// --- INSTALLATRON LOGIC ---
+		// Force JSON response via querystring
+		$installatron_api_url = "https://{$whm_host_domain}:2087/cgi/installatron/api.cgi?api=json";
+		
+		// Installatron requires standard URL-encoded form data
+		$installatron_payload = [
+			'cmd'         => 'install',
+			'user'        => $whm_username, // Tells Installatron which cPanel account owns this
+			'application' => 'wordpress',
+			'url'         => 'http://' . $clean_domain . '/', // THE FIX: HTTP + Trailing slash bypasses early SSL validation failures!
+			'login'       => $wp_admin_user,
+			'passwd'      => $wp_admin_pass,
+			'email'       => $wp_admin_email,
+			'sitetitle'   => 'New WordPress Site',
+			'background'  => 0 // THE FIX: Forces Installatron to wait and report actual errors rather than dying silently
+		];
 
-        } elseif ($installer_engine === 'installatron') {
-            // --- INSTALLATRON LOGIC ---
-            $installatron_payload = [
-                'cmd'      => 'install',
-                'user'     => $whm_username,
-                'application' => 'wordpress',
-                'url'      => 'https://' . $clean_domain,
-                'login'    => $wp_admin_user,
-                'passwd'   => $wp_admin_pass,
-                'email'    => $wp_admin_email,
-                'sitetitle'=> 'New WordPress Site',
-            ];
-            // Installatron natively hooks into WHM API
-            $res = $whm_api->call('installatron', $installatron_payload);
+		$ch = curl_init();
+		curl_setopt($ch, CURLOPT_URL, $installatron_api_url);
+		curl_setopt($ch, CURLOPT_POST, true);
+		curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($installatron_payload));
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+		curl_setopt($ch, CURLOPT_HTTPHEADER, [
+			'Authorization: whm root:' . $whm_api_token
+		]);
+		
+		$response = curl_exec($ch);
+		$status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+		curl_close($ch);
 
-            if (isset($res['metadata']['result']) && $res['metadata']['result'] != 1 && class_exists('SkyHSHOSO_Logger')) {
-                SkyHSHOSO_Logger::error('Installatron Install Failed: ' . json_encode($res));
-            }
-        }
-        // ---------------------------------------------------------
+		// Read the JSON response to verify the installation actually completed
+		$installatron_data = json_decode($response, true);
+		$is_success = isset($installatron_data['result']) && $installatron_data['result'];
+
+		if (!$is_success && class_exists('SkyHSHOSO_Logger')) {
+			$error_msg = isset($installatron_data['message']) ? $installatron_data['message'] : 'Unknown Installatron Error';
+			if (empty($response)) $error_msg = 'Empty response from Installatron API (Check WHM port 2087 accessibility).';
+			
+			SkyHSHOSO_Logger::error('Installatron Auto-Install Failed. Error: ' . $error_msg . ' | Raw: ' . $response, ['source' => 'installatron']);
+		}
+	} elseif ($installer_engine === 'softaculous') {
+		// --- SOFTACULOUS LOGIC ---
+		// Softaculous does not expose a native root-level REST API. It requires either SSH CLI access
+		// or hitting the user-level port (2083) with their plain-text password. 
+		if (class_exists('SkyHSHOSO_Logger')) {
+			SkyHSHOSO_Logger::error('Softaculous requires user-level cPanel API auth which is not available in this secure REST context. Please default to WP Toolkit or Installatron.');
+		}
+	}
+	// ---------------------------------------------------------
 
     // 3. Register Domain in the Dashboard Database
     SkyHSHOSO_WHM_API::clear_stats_cache($hosting_id);

@@ -1024,15 +1024,41 @@ class SkyHSHOSO_Dashboard_Shortcode {
 						$sets_cache = isset($options['wpt_sets_cache']) ? json_decode($options['wpt_sets_cache'], true) : array();
 						?>
 
-						<div class="skyhshoso-wizard-form-group">
+						<?php
+						// Pull the authorized engines and default engine from your settings
+						$options = get_option('skyhshoso_settings_group', array());
+						$enabled_engines = isset($options['wp_installer_engines']) ? (array) $options['wp_installer_engines'] : array('wptoolkit');
+						$default_engine  = isset($options['wp_default_installer_engine']) ? $options['wp_default_installer_engine'] : 'wptoolkit';
+						$allowed_sets    = isset($options['wpt_frontend_sets']) ? (array) $options['wpt_frontend_sets'] : array();
+						$sets_cache      = isset($options['wpt_sets_cache']) ? json_decode($options['wpt_sets_cache'], true) : array();
+
+						$engine_labels = array(
+							'wptoolkit'    => 'WP Toolkit (Recommended)',
+							'softaculous'  => 'Softaculous',
+							'installatron' => 'Installatron',
+							'none'         => 'Manual Setup Only'
+						);
+						?>
+
+						<div class="skyhshoso-wizard-form-group" <?php if (count($enabled_engines) <= 1) echo 'style="display:none;"'; ?>>
+							<label style="font-weight:600; display:block; margin-bottom:8px;">Installation Engine</label>
+							<select id="skyhshoso-wp-installer-engine" style="width:100%; padding:8px; border-radius:6px; border:1px solid #dcdcde;">
+								<?php foreach ($enabled_engines as $eng): ?>
+									<option value="<?php echo esc_attr($eng); ?>" <?php selected($default_engine, $eng); ?>>
+										<?php echo esc_html(isset($engine_labels[$eng]) ? $engine_labels[$eng] : $eng); ?>
+									</option>
+								<?php endforeach; ?>
+							</select>
+						</div>
+
+						<div id="skyhshoso-wp-plugin-set-wrapper" class="skyhshoso-wizard-form-group" style="display: <?php echo ($default_engine === 'wptoolkit' && in_array('wptoolkit', $enabled_engines)) ? 'block' : 'none'; ?>;">
 							<label style="font-weight:600; display:block; margin-bottom:8px;">Website Purpose</label>
 							<select id="skyhshoso-wp-plugin-set" style="width:100%; padding:8px; border-radius:6px; border:1px solid #dcdcde;">
 								<option value="0">Clean Install (No Extra Plugins)</option>
 								<?php 
-								// Dynamically output only the Sets you checked in the admin panel!
 								if (!empty($sets_cache) && is_array($sets_cache)) {
 									foreach ($sets_cache as $set) {
-										if (in_array($set['id'], $allowed_ids)) {
+										if (in_array($set['id'], $allowed_sets)) {
 											echo '<option value="' . esc_attr($set['id']) . '">' . esc_html($set['name']) . '</option>';
 										}
 									}
@@ -1040,6 +1066,20 @@ class SkyHSHOSO_Dashboard_Shortcode {
 								?>
 							</select>
 						</div>
+
+						<script>
+						// Live-toggle the Website Purpose dropdown on the frontend
+						document.addEventListener('DOMContentLoaded', function() {
+							var engineSelect = document.getElementById('skyhshoso-wp-installer-engine');
+							var setWrapper = document.getElementById('skyhshoso-wp-plugin-set-wrapper');
+							
+							if(engineSelect && setWrapper) {
+								engineSelect.addEventListener('change', function() {
+									setWrapper.style.display = (this.value === 'wptoolkit') ? 'block' : 'none';
+								});
+							}
+						});
+						</script>
                     </div>
                     <div id="skyhshoso-wp-message-<?php echo esc_attr($hosting_id); ?>" style="margin-top: 10px; font-size: 13px;"></div>
                 </div>

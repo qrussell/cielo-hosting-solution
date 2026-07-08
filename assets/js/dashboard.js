@@ -507,10 +507,14 @@
                 if (resultEl) resultEl.innerHTML = '<p style="color:#d63638;font-size:13px;">Please enter a domain.</p>';
                 return;
             }
-			// Capture the chosen Plugin Set ID
+			// Capture the chosen Installer Engine
+            var engineSelect = document.getElementById('skyhshoso-wp-installer-engine');
+            var installerEngine = engineSelect ? engineSelect.value : '';
+
+            // Capture the chosen Plugin Set ID
             var setSelect = document.getElementById('skyhshoso-wp-plugin-set');
             var pluginSetId = setSelect ? setSelect.value : '0';
-
+			
             if (formView) formView.style.display = 'none';
             if (loadingView) loadingView.style.display = 'flex';
 
@@ -582,7 +586,7 @@
                 loadMsg.appendChild(btnWrap);
             }
 
-            var params = 'action=skyhshoso_wp_provision&wp_site_id=' + encodeURIComponent(wpSiteId) + '&domain=' + encodeURIComponent(domain) + '&plugin_set=' + encodeURIComponent(pluginSetId) + '&nonce=' + encodeURIComponent(wpProvisionNonce);
+            var params = 'action=skyhshoso_wp_provision&wp_site_id=' + encodeURIComponent(wpSiteId) + '&domain=' + encodeURIComponent(domain) + '&installer_engine=' + encodeURIComponent(installerEngine) + '&plugin_set=' + encodeURIComponent(pluginSetId) + '&nonce=' + encodeURIComponent(wpProvisionNonce);
 
             var xhr = new XMLHttpRequest();
             xhr.open('POST', config.ajaxUrl, true);
