@@ -777,3 +777,250 @@
         init();
     }
 })();
+
+jQuery(document).ready(function($) {
+    if (typeof skyhshosoDashboard === 'undefined') return;
+
+    var ajaxurl = skyhshosoDashboard.ajaxUrl;
+    var nonce = skyhshosoDashboard.nonce;
+
+    // --- 1. Password Reset Modal ---
+    $('#skyhshoso-trigger-pass-reset').on('click', function(e) {
+        e.preventDefault();
+        $('#skyhs-new-pass').val('');
+        $('#skyhshoso-pass-modal').css('display', 'flex').hide().fadeIn(200);
+    });
+
+    $('#skyhshoso-cancel-pass').on('click', function(e) {
+        e.preventDefault();
+        $('#skyhshoso-pass-modal').fadeOut(200);
+    });
+
+    $('#skyhshoso-save-pass').on('click', function(e) {
+        e.preventDefault();
+        var btn = $(this);
+        var hostingId = btn.data('hosting-id');
+        var newPass = $('#skyhs-new-pass').val();
+
+        if (!newPass || newPass.length < 8) {
+            alert('Password must be at least 8 characters long.');
+            return;
+        }
+
+        var originalText = btn.text();
+        btn.text('Saving...').prop('disabled', true);
+
+        $.post(ajaxurl, {
+            action: 'skyhshoso_reset_cpanel_pass',
+            nonce: nonce,
+            hosting_id: hostingId,
+            new_pass: newPass
+        }, function(res) {
+            btn.text(originalText).prop('disabled', false);
+            if (res.success) {
+                alert('Password updated successfully!');
+                $('#skyhshoso-pass-modal').fadeOut(200);
+            } else {
+                alert('Error: ' + res.data.message);
+            }
+        }).fail(function() {
+            btn.text(originalText).prop('disabled', false);
+            alert('Server connection error.');
+        });
+    });
+
+    // --- 2. SSH Access Toggle ---
+    $('#skyhshoso-ssh-toggle').on('change', function() {
+        var isChecked = $(this).is(':checked');
+        var hostingId = $(this).data('hosting-id');
+        var switchEl = $(this);
+
+        switchEl.prop('disabled', true);
+
+        $.post(ajaxurl, {
+            action: 'skyhshoso_toggle_ssh',
+            nonce: nonce,
+            hosting_id: hostingId,
+            enable_ssh: isChecked
+        }, function(res) {
+            switchEl.prop('disabled', false);
+            if (!res.success) {
+                alert('Error: ' + res.data.message);
+                switchEl.prop('checked', !isChecked); 
+            }
+        }).fail(function() {
+            switchEl.prop('disabled', false);
+            switchEl.prop('checked', !isChecked);
+            alert('Server connection error.');
+        });
+    });
+
+    // --- 3. Live Stats Fetcher ---
+    function fetchCpanelStats() {
+        var statsGrid = $('.skyhshoso-stats-grid');
+        var diskContainer = $('#skyhshoso-disk-usage-container');
+
+        if (statsGrid.length > 0 || diskContainer.length > 0) {
+            var hostingId = statsGrid.length > 0 ? statsGrid.data('hosting-id') : diskContainer.data('hosting-id');
+            var fetchNonce = (typeof nonce !== 'undefined') ? nonce : (typeof skyhshosoDashboard !== 'undefined' ? skyhshosoDashboard.nonce : '');
+
+            $.post(ajaxurl, {
+                action: 'skyhshoso_get_cpanel_stats',
+                nonce: fetchNonce,
+                hosting_id: hostingId
+            }, function(res) {
+                $('.skyhshoso-cpanel-refresh-btn span').text('↻ Refresh');
+                
+                if (res.success) {
+                    var s = res.data.stats;
+                    
+                    if ($('#skyhshoso-ssh-toggle').length) {
+                        $('#skyhshoso-ssh-toggle').prop('checked', res.data.ssh_active);
+                    }
+
+                    if (s.diskusage && $('#skyhs-disk-bar').length) {
+                        var percent = parseFloat(s.diskusage.percent);
+                        var val = s.diskusage.value;
+                        var max = s.diskusage.max;
+                        
+                        $('#skyhs-disk-bar').css('width', percent + '%');
+                        if(percent > 80) $('#skyhs-disk-bar').css('background', '#f59e0b');
+                        if(percent > 95) $('#skyhs-disk-bar').css('background', '#ef4444');
+                        
+                        var maxText = (max === 'unlimited' || max === '0' || !max) ? 'Unlimited' : max;
+                        $('#skyhs-disk-text').text(val + ' used of ' + maxText);
+                    }
+
+                    if (statsGrid.length > 0) {
+                        var gridHtml = '';
+                        var displayMap = [
+                            { id: 'diskusage', icon: '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" width="24" height="24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path></svg>', title: 'Disk Usage' },
+                            { id: 'sqldiskusage', icon: '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" width="24" height="24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path></svg>', title: 'DB Disk' },
+                            { id: 'mysqldbs', icon: '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" width="24" height="24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>', title: 'Databases' },
+                            { id: 'subdomains', icon: '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" width="24" height="24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>', title: 'Subdomains' },
+                            { id: 'addondomains', icon: '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" width="24" height="24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"></path></svg>', title: 'Addons' }
+                        ];
+
+                        displayMap.forEach(function(metric) {
+                            var val = '0 / 0';
+                            if(s[metric.id]) {
+                                var usage = s[metric.id].value || '0';
+                                var max = s[metric.id].max || '0';
+                                var maxText = (max === 'unlimited' || max === '0') ? '&infin;' : max;
+                                val = usage + ' / ' + maxText;
+                            }
+                            
+                            gridHtml += '<div class="skyhshoso-stat-card" style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:16px; display:flex; align-items:center; gap:16px;">';
+                            gridHtml += '<div style="background:#f0f6fc; color:#2563eb; width:48px; height:48px; border-radius:8px; display:flex; align-items:center; justify-content:center;">' + metric.icon + '</div>';
+                            gridHtml += '<div><span style="display:block; font-size:18px; font-weight:700; color:#0f172a;">' + val + '</span><span style="font-size:12px; font-weight:600; color:#64748b; text-transform:uppercase;">' + metric.title + '</span></div>';
+                            gridHtml += '</div>';
+                        });
+
+                        statsGrid.css({
+                            'display': 'grid',
+                            'grid-template-columns': 'repeat(auto-fit, minmax(200px, 1fr))',
+                            'gap': '16px'
+                        });
+
+                        statsGrid.html(gridHtml);
+                        $('.skyhshoso-cpanel-status').text('Data synced securely from cPanel.').css('color', '#10b981');
+                    }
+                } else {
+                    if (statsGrid.length > 0) {
+                        statsGrid.html('<p style="color:#d63638; grid-column: 1 / -1;">Failed to load statistics: ' + res.data.message + '</p>');
+                        $('.skyhshoso-cpanel-status').text('Sync failed.').css('color', '#d63638');
+                    }
+                }
+            });
+        }
+    }
+
+    // Run stats fetcher on page load
+    fetchCpanelStats();
+
+    // Wire up the manual refresh button to the fetcher
+    $('.skyhshoso-cpanel-refresh-btn').off('click').on('click', function(e) {
+        e.preventDefault();
+        $(this).find('span').text('↻ Syncing...');
+        fetchCpanelStats();
+    });
+
+    // --- 4. Secure Sync Server Status ---
+    $('.skyhs-secure-sync-btn').off('click').on('click', function(e) {
+        e.preventDefault();
+        var btn = $(this);
+        var originalHtml = btn.html();
+        var fetchNonce = (typeof nonce !== 'undefined') ? nonce : (typeof skyhshosoDashboard !== 'undefined' ? skyhshosoDashboard.nonce : '');
+        
+        btn.html('Syncing...').prop('disabled', true).css('opacity', '0.6');
+        
+        $.post(ajaxurl, {
+            action: 'skyhshoso_frontend_sync',
+            nonce: fetchNonce,
+            hosting_id: btn.data('hosting-id')
+        }, function(res) {
+            btn.html(originalHtml).prop('disabled', false).css('opacity', '1');
+            alert(res.data ? res.data.message : 'Synced');
+            if (res.success) location.reload();
+        }).fail(function() {
+            btn.html(originalHtml).prop('disabled', false).css('opacity', '1');
+            alert('Server connection error.');
+        });
+    });
+
+    // --- 5. Secure Suspend / Unsuspend Server ---
+    $('.skyhs-secure-toggle-btn').off('click').on('click', function(e) {
+        e.preventDefault();
+        var btn = $(this);
+        var act = btn.data('action');
+        var fetchNonce = (typeof nonce !== 'undefined') ? nonce : (typeof skyhshosoDashboard !== 'undefined' ? skyhshosoDashboard.nonce : '');
+        
+        if(!confirm('Are you sure you want to ' + act + ' this server?')) return;
+        
+        var originalHtml = btn.html();
+        btn.html('Working...').prop('disabled', true).css('opacity', '0.6');
+        
+        $.post(ajaxurl, {
+            action: 'skyhshoso_frontend_toggle_status',
+            nonce: fetchNonce,
+            hosting_id: btn.data('hosting-id'),
+            account_action: act
+        }, function(res) {
+            alert(res.data ? res.data.message : 'Updated');
+            location.reload();
+        }).fail(function() {
+            btn.html(originalHtml).prop('disabled', false).css('opacity', '1');
+            alert('Server connection error.');
+        });
+    });
+
+    // --- 6. Secure Terminate Server (Delete) ---
+    $('.skyhs-secure-terminate-btn').off('click').on('click', function(e) {
+        e.preventDefault();
+        var btn = $(this);
+        var fetchNonce = (typeof nonce !== 'undefined') ? nonce : (typeof skyhshosoDashboard !== 'undefined' ? skyhshosoDashboard.nonce : '');
+        
+        if(!confirm('DANGER: This will permanently delete this cPanel account, all files, and databases from the server! Continue?')) return;
+        
+        var originalHtml = btn.html();
+        btn.html('Deleting...').prop('disabled', true).css('opacity', '0.6');
+        
+        $.post(ajaxurl, {
+            action: 'skyhshoso_frontend_terminate',
+            nonce: fetchNonce,
+            hosting_id: btn.data('hosting-id')
+        }, function(res) {
+            if (res.success) {
+                alert(res.data.message);
+                window.location.href = window.location.href.split('&hosting_id')[0]; 
+            } else {
+                btn.html(originalHtml).prop('disabled', false).css('opacity', '1');
+                alert('Deletion Failed: ' + res.data.message);
+            }
+        }).fail(function() {
+            btn.html(originalHtml).prop('disabled', false).css('opacity', '1');
+            alert('Server connection error.');
+        });
+    });
+});
+

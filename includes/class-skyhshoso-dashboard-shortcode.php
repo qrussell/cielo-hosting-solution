@@ -251,7 +251,7 @@ class SkyHSHOSO_Dashboard_Shortcode {
             // Only allow guest access if the admin has enabled it
             if ( SkyHSHOSO_Settings::is_guest_dashboard_enabled() ) {
                 // phpcs:disable WordPress.Security.NonceVerification.Recommended
-                $is_guest_dashboard   = $active_tab === 'dashboard';
+                $is_guest_dashboard   = ($active_tab === 'dashboard' || $active_tab === '');
                 $is_new_hosting       = $active_tab === 'skyhshoso_hosting' && isset($_GET['new_hosting']) && sanitize_text_field( wp_unslash($_GET['new_hosting']) ) === '1';
                 $is_new_domain        = $active_tab === 'domains' && isset($_GET['new_domain']) && sanitize_text_field( wp_unslash($_GET['new_domain']) ) === '1' && ! SkyHSHOSO_Settings::is_domain_registration_disabled();
                 $is_transfer_domain   = $active_tab === 'domains' && isset($_GET['transfer_domain']) && sanitize_text_field( wp_unslash($_GET['transfer_domain']) ) === '1' && ! SkyHSHOSO_Settings::is_domain_registration_disabled();
@@ -398,15 +398,16 @@ class SkyHSHOSO_Dashboard_Shortcode {
                                         'post_type' => 'skyhshoso_hosting',
                                         'posts_per_page' => 1,
                                     );
-                                    if (!current_user_can('administrator')) {
-                                        $invited_by = get_user_meta($current_user_id, 'skyhshoso_invited_by', true);
-                                        $invited_by = is_array($invited_by) ? $invited_by : array();
-                                        if (!empty($invited_by)) {
-                                            $hosting_args['author__in'] = array_merge(array($current_user_id), $invited_by);
-                                        } else {
-                                            $hosting_args['author'] = $current_user_id;
-                                        }
+                                    
+                                    // Remove Admin God Mode - Force exact user match for everyone on the frontend
+                                    $invited_by = get_user_meta($current_user_id, 'skyhshoso_invited_by', true);
+                                    $invited_by = is_array($invited_by) ? $invited_by : array();
+                                    if (!empty($invited_by)) {
+                                        $hosting_args['author__in'] = array_merge(array($current_user_id), $invited_by);
+                                    } else {
+                                        $hosting_args['author'] = $current_user_id;
                                     }
+                                    
                                     $hosting_query = new WP_Query($hosting_args);
                                     if ($hosting_query->have_posts()) {
                                         $hosting_query->the_post();
@@ -467,9 +468,6 @@ class SkyHSHOSO_Dashboard_Shortcode {
                                 $first_domain = null;
                                 if (isset($domains_grouped['your']) && !empty($domains_grouped['your'])) {
                                     $first_domain = $domains_grouped['your'][0];
-                                    $has_domain = true;
-                                } elseif (current_user_can('administrator') && isset($domains_grouped['all']) && !empty($domains_grouped['all'])) {
-                                    $first_domain = $domains_grouped['all'][0];
                                     $has_domain = true;
                                 } else {
                                     foreach ($domains_grouped as $key => $group) {
@@ -740,15 +738,14 @@ class SkyHSHOSO_Dashboard_Shortcode {
                     $args['s'] = $search_term;
                 }
 
-                if ( ! current_user_can( 'administrator' ) ) {
-                    $invited_by = get_user_meta( $current_user_id, 'skyhshoso_invited_by', true );
-                    $invited_by = is_array( $invited_by ) ? $invited_by : array();
+                // Remove Admin God Mode - Force exact user match for everyone on the frontend
+                $invited_by = get_user_meta( $current_user_id, 'skyhshoso_invited_by', true );
+                $invited_by = is_array( $invited_by ) ? $invited_by : array();
 
-                    if ( ! empty( $invited_by ) ) {
-                        $args['author__in'] = array_merge( array( $current_user_id ), $invited_by );
-                    } else {
-                        $args['author'] = $current_user_id;
-                    }
+                if ( ! empty( $invited_by ) ) {
+                    $args['author__in'] = array_merge( array( $current_user_id ), $invited_by );
+                } else {
+                    $args['author'] = $current_user_id;
                 }
 
                 $hosting_query = new WP_Query( $args );
@@ -787,9 +784,6 @@ class SkyHSHOSO_Dashboard_Shortcode {
                                 }
                                 
                                 $acct_stat = get_post_meta($hosting_id, 'skyhshoso_account_status', true) ?: 'active';
-                                $t_act = ($acct_stat === 'suspended') ? 'unsuspend' : 'suspend';
-                                $t_col = ($acct_stat === 'suspended') ? '#10b981' : '#f59e0b';
-                                $t_lbl = ($acct_stat === 'suspended') ? __('Unsuspend', 'skyhs-hosting-solution') : __('Suspend', 'skyhs-hosting-solution');
 
                                 $display_status = str_replace( '-', ' ', $subscription_status );
                                 $display_status = ucwords( $display_status );
@@ -818,18 +812,6 @@ class SkyHSHOSO_Dashboard_Shortcode {
                                             <?php else : ?>
                                                 <span class="skyhshoso-action-disabled" style="color:#999;font-size:13px; font-weight:500;"><?php echo esc_html( $display_status ); ?></span>
                                             <?php endif; ?>
-                                            
-                                            <button class="skyhshoso-button skyhs-sync-btn" data-hosting-id="<?php echo esc_attr( $hosting_id ); ?>" style="background:#f1f5f9; color:#475569; padding:6px 10px; border:1px solid #e2e8f0; font-size:12px; cursor:pointer;" title="<?php esc_attr_e( 'Sync Server Status', 'skyhs-hosting-solution' ); ?>">
-                                                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-                                            </button>
-
-                                            <button class="skyhshoso-button skyhs-toggle-btn" data-hosting-id="<?php echo esc_attr( $hosting_id ); ?>" data-action="<?php echo esc_attr( $t_act ); ?>" style="background:<?php echo $t_col; ?>; color:#fff; padding:6px 12px; font-size:12px; border:none; cursor:pointer;">
-                                                <?php echo esc_html( $t_lbl ); ?>
-                                            </button>
-
-                                            <button class="skyhshoso-button skyhs-terminate-btn" data-hosting-id="<?php echo esc_attr( $hosting_id ); ?>" style="background:#ef4444; color:#fff; padding:6px 10px; font-size:12px; border:none; cursor:pointer;" title="<?php esc_attr_e( 'Delete Account', 'skyhs-hosting-solution' ); ?>">
-                                                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                                            </button>
                                         </div>
                                     </td>
                                 </tr>
@@ -870,7 +852,7 @@ class SkyHSHOSO_Dashboard_Shortcode {
             return;
         }
         
-        // Permission Check
+        // Permission Check (We leave the admin check here so an admin can troubleshoot via direct URL)
         $current_user_id = get_current_user_id();
         $hosting_author_id = $hosting->post_author;
         $invited_by = get_user_meta($current_user_id, 'skyhshoso_invited_by', true);
@@ -926,11 +908,13 @@ class SkyHSHOSO_Dashboard_Shortcode {
                     <span class="skyhshoso-button-text">&larr; <?php esc_html_e('Back to List', 'skyhs-hosting-solution'); ?></span>
                 </a>
                 <div style="display:flex; gap:8px;">
-                    <button class="skyhshoso-button skyhs-sync-btn" data-hosting-id="<?php echo esc_attr($hosting_id); ?>" style="background:#f1f5f9; color:#475569; padding:6px 12px; border:1px solid #e2e8f0; font-size:12px;" title="<?php esc_attr_e( 'Sync Server Status', 'skyhs-hosting-solution' ); ?>">
+                    <button class="skyhshoso-button skyhs-secure-sync-btn" data-hosting-id="<?php echo esc_attr($hosting_id); ?>" style="background:#f1f5f9; color:#475569; padding:6px 12px; border:1px solid #e2e8f0; font-size:12px;" title="<?php esc_attr_e( 'Sync Server Status', 'skyhs-hosting-solution' ); ?>">
                         <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin-right:4px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> <?php esc_html_e('Sync', 'skyhs-hosting-solution'); ?>
                     </button>
-                    <button class="skyhshoso-button skyhs-toggle-btn" data-hosting-id="<?php echo esc_attr($hosting_id); ?>" data-action="<?php echo esc_attr($t_act); ?>" style="background:<?php echo $t_col; ?>; color:#fff; padding:6px 12px; font-size:12px; border:none;"><?php echo esc_html($t_lbl); ?></button>
-                    <button class="skyhshoso-button skyhs-terminate-btn" data-hosting-id="<?php echo esc_attr($hosting_id); ?>" style="background:#ef4444; color:#fff; padding:6px 12px; font-size:12px; border:none;"><?php esc_html_e('Delete', 'skyhs-hosting-solution'); ?></button>
+                    <?php if (current_user_can('manage_options')) : // ONLY SHOW TO ADMINS ?>
+                        <button class="skyhshoso-button skyhs-secure-toggle-btn" data-hosting-id="<?php echo esc_attr($hosting_id); ?>" data-action="<?php echo esc_attr($t_act); ?>" style="background:<?php echo $t_col; ?>; color:#fff; padding:6px 12px; font-size:12px; border:none;"><?php echo esc_html($t_lbl); ?></button>
+                        <button class="skyhshoso-button skyhs-secure-terminate-btn" data-hosting-id="<?php echo esc_attr($hosting_id); ?>" style="background:#ef4444; color:#fff; padding:6px 12px; font-size:12px; border:none;"><?php esc_html_e('Delete', 'skyhs-hosting-solution'); ?></button>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
@@ -1017,69 +1001,69 @@ class SkyHSHOSO_Dashboard_Shortcode {
                         <button type="button" class="skyhshoso-button skyhshoso-button-secondary" onclick="document.getElementById('skyhshoso-wp-install-modal').style.display='flex';">
                             <svg style="width:16px; height:16px; margin-right:4px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg> Install New
                         </button>
-						<?php
-						// Retrieve the synced sets from the plugin settings
-						$options = get_option('skyhshoso_settings_group', array());
-						$allowed_ids = isset($options['wpt_frontend_sets']) ? (array) $options['wpt_frontend_sets'] : array();
-						$sets_cache = isset($options['wpt_sets_cache']) ? json_decode($options['wpt_sets_cache'], true) : array();
-						?>
+                        <?php
+                        // Retrieve the synced sets from the plugin settings
+                        $options = get_option('skyhshoso_settings_group', array());
+                        $allowed_ids = isset($options['wpt_frontend_sets']) ? (array) $options['wpt_frontend_sets'] : array();
+                        $sets_cache = isset($options['wpt_sets_cache']) ? json_decode($options['wpt_sets_cache'], true) : array();
+                        ?>
 
-						<?php
-						// Pull the authorized engines and default engine from your settings
-						$options = get_option('skyhshoso_settings_group', array());
-						$enabled_engines = isset($options['wp_installer_engines']) ? (array) $options['wp_installer_engines'] : array('wptoolkit');
-						$default_engine  = isset($options['wp_default_installer_engine']) ? $options['wp_default_installer_engine'] : 'wptoolkit';
-						$allowed_sets    = isset($options['wpt_frontend_sets']) ? (array) $options['wpt_frontend_sets'] : array();
-						$sets_cache      = isset($options['wpt_sets_cache']) ? json_decode($options['wpt_sets_cache'], true) : array();
+                        <?php
+                        // Pull the authorized engines and default engine from your settings
+                        $options = get_option('skyhshoso_settings_group', array());
+                        $enabled_engines = isset($options['wp_installer_engines']) ? (array) $options['wp_installer_engines'] : array('wptoolkit');
+                        $default_engine  = isset($options['wp_default_installer_engine']) ? $options['wp_default_installer_engine'] : 'wptoolkit';
+                        $allowed_sets    = isset($options['wpt_frontend_sets']) ? (array) $options['wpt_frontend_sets'] : array();
+                        $sets_cache      = isset($options['wpt_sets_cache']) ? json_decode($options['wpt_sets_cache'], true) : array();
 
-						$engine_labels = array(
-							'wptoolkit'    => 'WP Toolkit (Recommended)',
-							'softaculous'  => 'Softaculous',
-							'installatron' => 'Installatron',
-							'none'         => 'Manual Setup Only'
-						);
-						?>
+                        $engine_labels = array(
+                            'wptoolkit'    => 'WP Toolkit (Recommended)',
+                            'softaculous'  => 'Softaculous',
+                            'installatron' => 'Installatron',
+                            'none'         => 'Manual Setup Only'
+                        );
+                        ?>
 
-						<div class="skyhshoso-wizard-form-group" <?php if (count($enabled_engines) <= 1) echo 'style="display:none;"'; ?>>
-							<label style="font-weight:600; display:block; margin-bottom:8px;">Installation Engine</label>
-							<select id="skyhshoso-wp-installer-engine" style="width:100%; padding:8px; border-radius:6px; border:1px solid #dcdcde;">
-								<?php foreach ($enabled_engines as $eng): ?>
-									<option value="<?php echo esc_attr($eng); ?>" <?php selected($default_engine, $eng); ?>>
-										<?php echo esc_html(isset($engine_labels[$eng]) ? $engine_labels[$eng] : $eng); ?>
-									</option>
-								<?php endforeach; ?>
-							</select>
-						</div>
+                        <div class="skyhshoso-wizard-form-group" <?php if (count($enabled_engines) <= 1) echo 'style="display:none;"'; ?>>
+                            <label style="font-weight:600; display:block; margin-bottom:8px;">Installation Engine</label>
+                            <select id="skyhshoso-wp-installer-engine" style="width:100%; padding:8px; border-radius:6px; border:1px solid #dcdcde;">
+                                <?php foreach ($enabled_engines as $eng): ?>
+                                    <option value="<?php echo esc_attr($eng); ?>" <?php selected($default_engine, $eng); ?>>
+                                        <?php echo esc_html(isset($engine_labels[$eng]) ? $engine_labels[$eng] : $eng); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
 
-						<div id="skyhshoso-wp-plugin-set-wrapper" class="skyhshoso-wizard-form-group" style="display: <?php echo ($default_engine === 'wptoolkit' && in_array('wptoolkit', $enabled_engines)) ? 'block' : 'none'; ?>;">
-							<label style="font-weight:600; display:block; margin-bottom:8px;">Website Purpose</label>
-							<select id="skyhshoso-wp-plugin-set" style="width:100%; padding:8px; border-radius:6px; border:1px solid #dcdcde;">
-								<option value="0">Clean Install (No Extra Plugins)</option>
-								<?php 
-								if (!empty($sets_cache) && is_array($sets_cache)) {
-									foreach ($sets_cache as $set) {
-										if (in_array($set['id'], $allowed_sets)) {
-											echo '<option value="' . esc_attr($set['id']) . '">' . esc_html($set['name']) . '</option>';
-										}
-									}
-								}
-								?>
-							</select>
-						</div>
+                        <div id="skyhshoso-wp-plugin-set-wrapper" class="skyhshoso-wizard-form-group" style="display: <?php echo ($default_engine === 'wptoolkit' && in_array('wptoolkit', $enabled_engines)) ? 'block' : 'none'; ?>;">
+                            <label style="font-weight:600; display:block; margin-bottom:8px;">Website Purpose</label>
+                            <select id="skyhshoso-wp-plugin-set" style="width:100%; padding:8px; border-radius:6px; border:1px solid #dcdcde;">
+                                <option value="0">Clean Install (No Extra Plugins)</option>
+                                <?php 
+                                if (!empty($sets_cache) && is_array($sets_cache)) {
+                                    foreach ($sets_cache as $set) {
+                                        if (in_array($set['id'], $allowed_sets)) {
+                                            echo '<option value="' . esc_attr($set['id']) . '">' . esc_html($set['name']) . '</option>';
+                                        }
+                                    }
+                                }
+                                ?>
+                            </select>
+                        </div>
 
-						<script>
-						// Live-toggle the Website Purpose dropdown on the frontend
-						document.addEventListener('DOMContentLoaded', function() {
-							var engineSelect = document.getElementById('skyhshoso-wp-installer-engine');
-							var setWrapper = document.getElementById('skyhshoso-wp-plugin-set-wrapper');
-							
-							if(engineSelect && setWrapper) {
-								engineSelect.addEventListener('change', function() {
-									setWrapper.style.display = (this.value === 'wptoolkit') ? 'block' : 'none';
-								});
-							}
-						});
-						</script>
+                        <script>
+                        // Live-toggle the Website Purpose dropdown on the frontend
+                        document.addEventListener('DOMContentLoaded', function() {
+                            var engineSelect = document.getElementById('skyhshoso-wp-installer-engine');
+                            var setWrapper = document.getElementById('skyhshoso-wp-plugin-set-wrapper');
+                            
+                            if(engineSelect && setWrapper) {
+                                engineSelect.addEventListener('change', function() {
+                                    setWrapper.style.display = (this.value === 'wptoolkit') ? 'block' : 'none';
+                                });
+                            }
+                        });
+                        </script>
                     </div>
                     <div id="skyhshoso-wp-message-<?php echo esc_attr($hosting_id); ?>" style="margin-top: 10px; font-size: 13px;"></div>
                 </div>
@@ -1610,7 +1594,7 @@ class SkyHSHOSO_Dashboard_Shortcode {
                         </div>
                         <div class="skyhshoso-subscription-footer">
                             <?php if ( $status === 'active' ) : ?>
-                                <a href="<?php echo esc_url( wp_nonce_url( add_query_arg( array( 'tab' => 'subscriptions', 'sub_action' => 'cancel', 'sub_id' => $subscription->get_id() ), self::get_base_url() ), 'skyhshoso_sub_action_' . $subscription->get_id() ) ); ?>" class="skyhshoso-card-button skyhshoso-btn-danger" onclick="return confirm('<?php esc_attr_e( 'Your subscription will remain active until the end of the current billing period. Continue?', 'skyhs-hosting-solution' ); ?>');">
+                                <a href="<?php echo esc_url( wp_nonce_url( add_query_arg( array( 'tab' => 'subscriptions', 'sub_action' => 'cancel', 'sub_id' => $subscription->get_id() ), self::get_base_url() ) ), 'skyhshoso_sub_action_' . $subscription->get_id() ); ?>" class="skyhshoso-card-button skyhshoso-btn-danger" onclick="return confirm('<?php esc_attr_e( 'Your subscription will remain active until the end of the current billing period. Continue?', 'skyhs-hosting-solution' ); ?>');">
                                     <span><?php esc_html_e( 'Cancel', 'skyhs-hosting-solution' ); ?></span>
                                 </a>
                                 <?php if ( skyhshoso_can_user_renew_early( $subscription ) ) : ?>
@@ -1620,7 +1604,7 @@ class SkyHSHOSO_Dashboard_Shortcode {
                                 <?php endif; ?>
                             <?php endif; ?>
                             <?php if ( $status === 'pending-cancel' ) : ?>
-                                <a href="<?php echo esc_url( wp_nonce_url( add_query_arg( array( 'tab' => 'subscriptions', 'sub_action' => 'undo_cancel', 'sub_id' => $subscription->get_id() ), self::get_base_url() ), 'skyhshoso_sub_action_' . $subscription->get_id() ) ); ?>" class="skyhshoso-card-button skyhshoso-btn-danger">
+                                <a href="<?php echo esc_url( wp_nonce_url( add_query_arg( array( 'tab' => 'subscriptions', 'sub_action' => 'undo_cancel', 'sub_id' => $subscription->get_id() ), self::get_base_url() ) ), 'skyhshoso_sub_action_' . $subscription->get_id() ); ?>" class="skyhshoso-card-button skyhshoso-btn-danger">
                                     <span><?php esc_html_e( 'Undo Cancel', 'skyhs-hosting-solution' ); ?></span>
                                 </a>
                             <?php endif; ?>
@@ -1829,16 +1813,14 @@ class SkyHSHOSO_Dashboard_Shortcode {
                 $dpaged = isset( $_GET['dpaged'] ) ? max( 1, intval( $_GET['dpaged'] ) ) : 1;
 
                 $flat_domains = array();
-                if ( current_user_can( 'administrator' ) && isset( $domains_grouped['all'] ) && ! empty( $domains_grouped['all'] ) ) {
-                    $flat_domains = $domains_grouped['all'];
-                } else {
-                    if ( isset( $domains_grouped['your'] ) && ! empty( $domains_grouped['your'] ) ) {
-                        $flat_domains = $domains_grouped['your'];
-                    }
-                    foreach ( $domains_grouped as $key => $group ) {
-                        if ( $key !== 'your' && isset( $group['domains'] ) && ! empty( $group['domains'] ) ) {
-                            $flat_domains = array_merge( $flat_domains, $group['domains'] );
-                        }
+                
+                // Remove Admin God Mode - Force exact user match for everyone on the frontend
+                if ( isset( $domains_grouped['your'] ) && ! empty( $domains_grouped['your'] ) ) {
+                    $flat_domains = $domains_grouped['your'];
+                }
+                foreach ( $domains_grouped as $key => $group ) {
+                    if ( $key !== 'your' && isset( $group['domains'] ) && ! empty( $group['domains'] ) ) {
+                        $flat_domains = array_merge( $flat_domains, $group['domains'] );
                     }
                 }
 
@@ -2324,14 +2306,13 @@ class SkyHSHOSO_Dashboard_Shortcode {
             'paged'          => $paged,
         );
 
-        if ( ! current_user_can( 'administrator' ) ) {
-            $invited_by = get_user_meta( $current_user_id, 'skyhshoso_invited_by', true );
-            $invited_by = is_array( $invited_by ) ? $invited_by : array();
-            if ( ! empty( $invited_by ) ) {
-                $args['author__in'] = array_merge( array( $current_user_id ), $invited_by );
-            } else {
-                $args['author'] = $current_user_id;
-            }
+        // Remove Admin God Mode - Force exact user match for everyone on the frontend
+        $invited_by = get_user_meta( $current_user_id, 'skyhshoso_invited_by', true );
+        $invited_by = is_array( $invited_by ) ? $invited_by : array();
+        if ( ! empty( $invited_by ) ) {
+            $args['author__in'] = array_merge( array( $current_user_id ), $invited_by );
+        } else {
+            $args['author'] = $current_user_id;
         }
 
         if ( ! empty( $search ) ) {
@@ -2363,9 +2344,6 @@ class SkyHSHOSO_Dashboard_Shortcode {
                 }
                 
                 $acct_stat = get_post_meta($hosting_id, 'skyhshoso_account_status', true) ?: 'active';
-                $t_act = ($acct_stat === 'suspended') ? 'unsuspend' : 'suspend';
-                $t_col = ($acct_stat === 'suspended') ? '#10b981' : '#f59e0b';
-                $t_lbl = ($acct_stat === 'suspended') ? __('Unsuspend', 'skyhs-hosting-solution') : __('Suspend', 'skyhs-hosting-solution');
 
                 $display_status = str_replace( '-', ' ', $subscription_status );
                 $display_status = ucwords( $display_status );
@@ -2394,18 +2372,6 @@ class SkyHSHOSO_Dashboard_Shortcode {
                             <?php else : ?>
                                 <span class="skyhshoso-action-disabled" style="color:#999;font-size:13px; font-weight:500;"><?php echo esc_html( $display_status ); ?></span>
                             <?php endif; ?>
-                            
-                            <button class="skyhshoso-button skyhs-sync-btn" data-hosting-id="<?php echo esc_attr( $hosting_id ); ?>" style="background:#f1f5f9; color:#475569; padding:6px 10px; border:1px solid #e2e8f0; font-size:12px; cursor:pointer;" title="<?php esc_attr_e( 'Sync Server Status', 'skyhs-hosting-solution' ); ?>">
-                                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-                            </button>
-
-                            <button class="skyhshoso-button skyhs-toggle-btn" data-hosting-id="<?php echo esc_attr( $hosting_id ); ?>" data-action="<?php echo esc_attr( $t_act ); ?>" style="background:<?php echo $t_col; ?>; color:#fff; padding:6px 12px; font-size:12px; border:none; cursor:pointer;">
-                                <?php echo esc_html( $t_lbl ); ?>
-                            </button>
-
-                            <button class="skyhshoso-button skyhs-terminate-btn" data-hosting-id="<?php echo esc_attr( $hosting_id ); ?>" style="background:#ef4444; color:#fff; padding:6px 10px; font-size:12px; border:none; cursor:pointer;" title="<?php esc_attr_e( 'Delete Account', 'skyhs-hosting-solution' ); ?>">
-                                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                            </button>
                         </div>
                     </td>
                 </tr>
@@ -2438,16 +2404,14 @@ class SkyHSHOSO_Dashboard_Shortcode {
         $domains_grouped = $domains_handler->get_all_accessible_domains();
 
         $flat_domains = array();
-        if ( current_user_can( 'administrator' ) && isset( $domains_grouped['all'] ) && ! empty( $domains_grouped['all'] ) ) {
-            $flat_domains = $domains_grouped['all'];
-        } else {
-            if ( isset( $domains_grouped['your'] ) && ! empty( $domains_grouped['your'] ) ) {
-                $flat_domains = $domains_grouped['your'];
-            }
-            foreach ( $domains_grouped as $key => $group ) {
-                if ( $key !== 'your' && isset( $group['domains'] ) && ! empty( $group['domains'] ) ) {
-                    $flat_domains = array_merge( $flat_domains, $group['domains'] );
-                }
+
+        // Remove Admin God Mode - Force exact user match for everyone on the frontend
+        if ( isset( $domains_grouped['your'] ) && ! empty( $domains_grouped['your'] ) ) {
+            $flat_domains = $domains_grouped['your'];
+        }
+        foreach ( $domains_grouped as $key => $group ) {
+            if ( $key !== 'your' && isset( $group['domains'] ) && ! empty( $group['domains'] ) ) {
+                $flat_domains = array_merge( $flat_domains, $group['domains'] );
             }
         }
 

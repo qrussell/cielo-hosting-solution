@@ -90,7 +90,6 @@ class SkyHSHOSO_WP_Site_Manager {
             <div id="skyhshoso-wpm-notice" class="notice" style="display:none;"></div>
 
             <div id="skyhshoso-wpm-app">
-                <!-- Guided create/edit panel -->
                 <div class="skyhshoso-hm-form-panel" id="skyhshoso-wpm-form-panel" style="display:none;">
                     <div class="skyhshoso-hm-form-header">
                         <h2 id="skyhshoso-wpm-form-title"><?php esc_html_e( 'Create WordPress Site', 'skyhs-hosting-solution' ); ?></h2>
@@ -194,8 +193,7 @@ class SkyHSHOSO_WP_Site_Manager {
                     </div>
 
                     <div id="skyhshoso-wpm-container">
-                        <!-- Loaded dynamically via AJAX -->
-                    </div>
+                        </div>
 
                     <div class="skyhshoso-hm-pagination" style="display:flex;justify-content:space-between;align-items:center;margin-top:15px;padding-top:15px;border-top:1px solid #eee;">
                         <button type="button" id="wpm-prev-page" class="button" disabled>&laquo; <?php esc_html_e( 'Previous', 'skyhs-hosting-solution' ); ?></button>
@@ -294,7 +292,8 @@ class SkyHSHOSO_WP_Site_Manager {
 
             $sites[] = array(
                 'id'              => $post->ID,
-                'title'           => $post->post_title,
+                // THE FIX: Decode HTML entities so "cPanel &#8211; Hosting" becomes "cPanel - Hosting"
+                'title'           => html_entity_decode( $post->post_title, ENT_QUOTES, 'UTF-8' ), 
                 'domain'          => $domain ?: '',
                 'server'          => $server_name,
                 'server_id'       => $server_id ?: '',
@@ -375,10 +374,11 @@ class SkyHSHOSO_WP_Site_Manager {
 
         $data = array(
             'id'              => $post->ID,
-            'title'           => $post->post_title,
+            // THE FIX: Decode HTML entities here as well
+            'title'           => html_entity_decode( $post->post_title, ENT_QUOTES, 'UTF-8' ),
             'product_id'      => $product_id ?: '',
             'variation_id'    => $variation_id ?: '',
-            'product_title'   => $product_title,
+            'product_title'   => html_entity_decode( $product_title, ENT_QUOTES, 'UTF-8' ),
             'owner_id'        => $post->post_author,
             'owner_name'      => $owner_name,
             'server_id'       => $server_id ?: '',
