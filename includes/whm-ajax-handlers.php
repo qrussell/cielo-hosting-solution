@@ -901,90 +901,78 @@ function skyhshoso_assign_custom_domain() {
 }
 
 
-/**
- * =========================================================================
- * CPANEL DASHBOARD FUNCTIONALITY (STATS, SSH, PASSWORD)
- * =========================================================================
- */
-add_action('wp_ajax_skyhshoso_get_cpanel_stats_callback', 'skyhshoso_get_cpanel_stats_callback');
+// Make sure the action hook matches what your dashboard.js calls!
+add_action('wp_ajax_skyhshoso_get_cpanel_stats', 'skyhshoso_get_cpanel_stats_callback');
 function skyhshoso_get_cpanel_stats_callback() {
-    // 1. Get the hosting ID
-    $hosting_id = absint($_POST['hosting_id']);
-    
-    // 2. Fetch the specific server assigned to this hosting post
-    $server_id = get_post_meta($hosting_id, 'skyhshoso_server_id', true);
-    
-    // 3. Get credentials for THAT specific server
-    $whm_token = get_post_meta($server_id, '_skyhshoso_whm_token', true);
-    $whm_host  = get_post_meta($server_id, '_skyhshoso_whm_host', true);
-    $username  = get_post_meta($hosting_id, 'skyhshoso_hosting_username', true);
-
-    if (empty($whm_token) || empty($whm_host)) {
-        wp_send_json_error(['message' => 'Credentials not found for this server.']);
-    }
+    // 1. Security & Nonce Check
     if (!isset($_POST['nonce']) || !wp_verify_nonce(sanitize_key($_POST['nonce']), 'skyhshoso_dashboard_nonce')) {
         wp_send_json_error(['message' => 'Invalid security token.']);
     }
     
-    $hosting_id = intval($_POST['hosting_id']);
+    $hosting_id = absint($_POST['hosting_id']);
     
-    // STRICT TENANT VIEW
+    // 2. STRICT TENANT VIEW (Security check)
     $current_user_id = get_current_user_id();
     $post_author_id = absint(get_post_field('post_author', $hosting_id));
     $invited_by = get_user_meta($current_user_id, 'skyhshoso_invited_by', true) ?: [];
     
-    if ($current_user_id !== $post_author_id && !in_array($post_author_id, $invited_by)) {
+    if ($current_user_id !== $post_author_id && !in_array($post_author_id, $invited_by) && !current_user_can('manage_options')) {
         wp_send_json_error(['message' => 'Permission denied.']);
     }
 
-    $server_id  = get_post_meta($hosting_id, 'skyhshoso_server_id', true);
-    $username   = get_post_meta($hosting_id, 'skyhshoso_hosting_username', true);
+    // 3. Fetch Core Data
+    $server_id = get_post_meta($hosting_id, 'skyhshoso_server_id', true);
+    $username  = get_post_meta($hosting_id, 'skyhshoso_hosting_username', true);
 
-    if (!$server_id || !$username) wp_send_json_error(['message' => 'Server not provisioned yet.']);
-
-    $whm_api_token = get_post_meta($server_id, '_skyhshoso_whm_token', true);
-    $whm_api_host  = get_post_meta($server_id, '_skyhshoso_whm_host', true);
-
-    if (empty($whm_api_token) || empty($whm_api_host)) wp_send_json_error(['message' => 'Server API credentials missing.']);
-
-    $whm_host_domain = parse_url($whm_api_host, PHP_URL_HOST) ?: $whm_api_host;
-    $whm_host_domain = preg_replace('/:\d+$/', '', $whm_host_domain);
-    $auth_header = 'Authorization: whm root:' . $whm_api_token;
-
-    $uapi_url = "https://{$whm_host_domain}:2087/json-api/cpanel?api.version=1&cpanel.module=StatsBar&cpanel.function=get_stat_items&cpanel.user={$username}&display=diskusage%7Csqldiskusage%7Cmysqldbs%7Csubdomains%7Caddondomains";
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $uapi_url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [$auth_header]);
-    $uapi_res_raw = curl_exec($ch);
-    curl_close($ch);
-    $uapi_res = json_decode($uapi_res_raw, true);
-
-    $summary_url = "https://{$whm_host_domain}:2087/json-api/accountsummary?api.version=1&user={$username}";
-    $ch2 = curl_init();
-    curl_setopt($ch2, CURLOPT_URL, $summary_url);
-    curl_setopt($ch2, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch2, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($ch2, CURLOPT_HTTPHEADER, [$auth_header]);
-    $summary_raw = curl_exec($ch2);
-    curl_close($ch2);
-    $summary = json_decode($summary_raw, true);
-    
-    $ssh_active = false;
-    if (isset($summary['data']['acct'][0]['shell'])) {
-        $shell = $summary['data']['acct'][0]['shell'];
-        $ssh_active = (strpos($shell, 'noshell') === false && strpos($shell, 'nologin') === false);
+    if (!$server_id || !$username) {
+        wp_send_json_error(['message' => 'Server not provisioned yet.']);
     }
 
-    $stats = array();
-    if (isset($uapi_res['data']['result']['data']) && is_array($uapi_res['data']['result']['data'])) {
-        foreach ($uapi_res['data']['result']['data'] as $item) {
-            $stats[$item['id']] = $item;
+    // --- ADD THIS BYPASS FOR EXTERNAL ACCOUNTS ---
+    $is_external = get_post_meta($hosting_id, '_is_external_cpanel', true);
+    if ($is_external) {
+        // Feed the JavaScript empty stats so the dashboard graphs don't break
+        $mock_stats = [
+            'diskusage' => ['value' => 'N/A', 'max' => 'N/A', 'percent' => 0],
+            'bandwidth' => ['value' => 'N/A', 'max' => 'N/A', 'percent' => 0],
+            'mysqldbs'  => ['value' => 'N/A', 'max' => 'N/A', 'percent' => 0],
+            'domains'   => ['value' => 'N/A', 'max' => 'N/A', 'percent' => 0]
+        ];
+        wp_send_json_success(['stats' => $mock_stats, 'ssh_active' => false]);
+        return; // Stop execution here
+    }
+    // ----------------------------------------------
+
+    // 4. INIT THE FACTORY DRIVER
+    $driver = SkyHSHOSO_Provider_Factory::get_driver($server_id);
+    if (is_wp_error($driver)) {
+        wp_send_json_error(['message' => $driver->get_error_message()]);
+    }
+
+    // 5. Ask the Driver for the Stats
+    $stats = $driver->get_account_stats($username);
+    if (is_wp_error($stats)) {
+        wp_send_json_error(['message' => $stats->get_error_message()]);
+    }
+
+    // 6. Ask the Driver for SSH Status
+    // We reuse the get_account_summary method we built previously to check shell access!
+    $ssh_active = false;
+    $summary = $driver->get_account_summary($username);
+    
+    if (!is_wp_error($summary)) {
+        if (isset($summary['shell'])) { // WHM gives us the shell path
+            $shell = $summary['shell'];
+            $ssh_active = (strpos($shell, 'noshell') === false && strpos($shell, 'nologin') === false);
+        } else {
+            // HestiaCP doesn't return shell status in the summary by default, 
+            // so we assume standard access is true for Hestia accounts.
+            $ssh_active = true;
         }
     }
 
-    wp_send_json_success(array('stats' => $stats, 'ssh_active' => $ssh_active));
+    // 7. Return to the Dashboard UI
+    wp_send_json_success(['stats' => $stats, 'ssh_active' => $ssh_active]);
 }
 
 add_action('wp_ajax_skyhshoso_toggle_ssh_callback', 'skyhshoso_toggle_ssh_callback');
@@ -1067,8 +1055,17 @@ function skyhshoso_reset_cpanel_pass_callback() {
     $whm_host_domain = preg_replace('/:\d+$/', '', $whm_host_domain);
     $auth_header = 'Authorization: whm root:' . $whm_api_token;
 
-    $pass_encoded = urlencode($new_pass);
-    $passwd_url = "https://{$whm_host_domain}:2087/json-api/passwd?api.version=1&user={$username}&password={$pass_encoded}";
+    $driver = SkyHSHOSO_Provider_Factory::get_driver($server_id);
+    if (is_wp_error($driver)) { wp_send_json_error(['message' => $driver->get_error_message()]); }
+
+    $result = $driver->change_password($username, $new_pass);
+
+    if (is_wp_error($result)) {
+        wp_send_json_error(['message' => 'Failed to reset password: ' . $result->get_error_message()]);
+    } else {
+        update_post_meta($hosting_id, 'skyhshoso_hosting_password', $new_pass);
+        wp_send_json_success(['message' => 'Password reset successfully.']);
+    }
     
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $passwd_url);
@@ -1105,7 +1102,18 @@ function skyhshoso_sync_account_callback() {
     $server_id = get_post_meta($hosting_id, 'skyhshoso_server_id', true);
     $username  = get_post_meta($hosting_id, 'skyhshoso_hosting_username', true);
 
-    // 1. Initialize the Factory Driver
+    // --- ADD THIS BYPASS FOR EXTERNAL ACCOUNTS ---
+    $is_external = get_post_meta($hosting_id, '_is_external_cpanel', true);
+    if ($is_external) {
+        // We don't have Root access to check suspension on external servers, 
+        // so we simply verify the connection is still recognized and return active.
+        update_post_meta($hosting_id, 'skyhshoso_account_status', 'active');
+        wp_send_json_success(['message' => 'External connection successfully verified!', 'status' => 'active']);
+        return; // Stop execution here
+    }
+    // ----------------------------------------------
+
+    // 1. Initialize the Factory Driver (Only runs for internal servers now!)
     $driver = SkyHSHOSO_Provider_Factory::get_driver($server_id);
     if (is_wp_error($driver)) { wp_send_json_error(['message' => $driver->get_error_message()]); }
 

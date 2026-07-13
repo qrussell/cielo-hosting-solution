@@ -796,3 +796,143 @@ add_action( 'init', 'skyhshoso_load_textdomain' );
 function skyhshoso_load_textdomain() {
     load_plugin_textdomain( 'skyhs-hosting-solution', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
 }
+/**
+ * =========================================================================
+ * SERVER CONFIGURATION META BOX (WHM vs HestiaCP)
+ * =========================================================================
+ */
+
+add_action('add_meta_boxes', 'skyhshoso_add_server_type_metabox');
+function skyhshoso_add_server_type_metabox() {
+    add_meta_box(
+        'skyhshoso_server_type_box',
+        'Control Panel Type',
+        'skyhshoso_render_server_type_metabox',
+        'skyhshoso_server', // Targets the Server custom post type
+        'side',
+        'high'
+    );
+}
+
+function skyhshoso_render_server_type_metabox($post) {
+    // Get the current saved type, default to 'whm' for backwards compatibility
+    $current_type = get_post_meta($post->ID, '_skyhshoso_server_type', true);
+    if (empty($current_type)) {
+        $current_type = 'whm';
+    }
+
+    wp_nonce_field('skyhs_server_type_save', 'skyhs_server_type_nonce');
+    ?>
+    <div style="padding: 10px 0;">
+        <label for="skyhshoso_server_type" style="display:block; font-weight:600; margin-bottom:8px;">Select API Driver:</label>
+        <select name="_skyhshoso_server_type" id="skyhshoso_server_type" style="width:100%;">
+            <option value="whm" <?php selected($current_type, 'whm'); ?>>cPanel / WHM</option>
+            <option value="hestiacp" <?php selected($current_type, 'hestiacp'); ?>>HestiaCP</option>
+        </select>
+        <p class="description" style="margin-top:10px;">This tells the system how to communicate with this server.</p>
+    </div>
+
+    <script>
+    jQuery(document).ready(function($) {
+        function updateServerLabels() {
+            var type = $('#skyhshoso_server_type').val();
+            
+            // Find the existing input fields by their database names
+            var hostInput = $('input[name="_skyhshoso_whm_host"]');
+            var userInput = $('input[name="_skyhshoso_whm_user_id"]');
+            var tokenInput = $('input[name="_skyhshoso_whm_token"], textarea[name="_skyhshoso_whm_token"]');
+
+            // Find their visual labels
+            var hostLabel = hostInput.closest('tr, .acf-field, .inside').find('label').first();
+            var userLabel = userInput.closest('tr, .acf-field, .inside').find('label').first();
+            var tokenLabel = tokenInput.closest('tr, .acf-field, .inside').find('label').first();
+
+            // Swap the text based on the dropdown!
+            if (type === 'hestiacp') {
+                if(hostLabel.length) hostLabel.html('<strong>HestiaCP Host / IP Address</strong>');
+                if(userLabel.length) userLabel.html('<strong>HestiaCP Access Key ID</strong>');
+                if(tokenLabel.length) tokenLabel.html('<strong>HestiaCP Secret Key</strong>');
+            } else {
+                if(hostLabel.length) hostLabel.html('<strong>WHM Host / IP Address</strong>');
+                if(userLabel.length) userLabel.html('<strong>WHM Username (root)</strong>');
+                if(tokenLabel.length) tokenLabel.html('<strong>WHM API Token</strong>');
+            }
+        }
+
+        // Run when dropdown changes, and run once on page load
+        $('#skyhshoso_server_type').on('change', updateServerLabels);
+        setTimeout(updateServerLabels, 300); 
+    });
+    </script>
+    <?php
+}
+
+add_action('save_post', 'skyhshoso_save_server_type');
+function skyhshoso_save_server_type($post_id) {
+    if (!isset($_POST['skyhs_server_type_nonce']) || !wp_verify_nonce($_POST['skyhs_server_type_nonce'], 'skyhs_server_type_save')) return;
+    if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) return;
+    if (!current_user_can('edit_post', $post_id)) return;
+
+    if (isset($_POST['_skyhshoso_server_type'])) {
+        update_post_meta($post_id, '_skyhshoso_server_type', sanitize_text_field($_POST['_skyhshoso_server_type']));
+    }
+}
+/**
+ * =========================================================================
+ * CASCADING DELETES: CLEAN UP WP SITES WHEN HOSTING IS TERMINATED
+ * =========================================================================
+ */
+add_action('trashed_post', 'skyhshoso_cleanup_orphaned_wpsites');
+add_action('before_delete_post', 'skyhshoso_cleanup_orphaned_wpsites');
+
+function skyhshoso_cleanup_orphaned_wpsites($post_id) {
+    // 1. Only run if the post being deleted is a Hosting account
+    if (get_post_type($post_id) !== 'skyhshoso_hosting') {
+        return;
+    }
+
+    // 2. Identify the cPanel user and Subscription ID attached to this hosting account
+    $username = get_post_meta($post_id, 'skyhshoso_hosting_username', true);
+    $sub_id   = get_post_meta($post_id, 'skyhshoso_subscription_id', true);
+
+    if (!$username && !$sub_id) {
+        return;
+    }
+
+    // 3. Find all WP Sites linked to this cPanel username OR Subscription ID
+    $args = array(
+        'post_type'      => 'skyhshoso_wp_site',
+        'posts_per_page' => -1,
+        'fields'         => 'ids',
+        'meta_query'     => array(
+            'relation' => 'OR'
+        )
+    );
+
+    if ($username) {
+        $args['meta_query'][] = array(
+            'key'     => 'skyhshoso_wp_cpanel_user',
+            'value'   => $username,
+            'compare' => '='
+        );
+    }
+
+    if ($sub_id) {
+        $args['meta_query'][] = array(
+            'key'     => 'skyhshoso_subscription_id',
+            'value'   => $sub_id,
+            'compare' => '='
+        );
+    }
+
+    $wp_sites = get_posts($args);
+
+    // 4. Cascade the trash/delete command down to the child WP Sites
+    foreach ($wp_sites as $site_id) {
+        if (current_action() === 'trashed_post') {
+            wp_trash_post($site_id);
+        } else {
+            wp_delete_post($site_id, true);
+        }
+    }
+}

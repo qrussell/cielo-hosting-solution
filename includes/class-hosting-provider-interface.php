@@ -26,4 +26,5 @@ interface SkyHSHOSO_Hosting_Driver_Interface {
     // 4. WordPress & SSO Handoff
     public function generate_sso_url($username, $target = 'panel');
     public function scan_for_wordpress($username, $domain_doc_roots);
+	public function get_packages(); // <-- ADD THIS LINE
 }

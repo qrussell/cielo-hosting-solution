@@ -73,6 +73,7 @@ class SkyHSHOSO_Server_Manager {
             $server_list[] = array(
                 'id'          => $s->ID,
                 'name'        => $s->post_title,
+                'type'        => get_post_meta( $s->ID, '_skyhshoso_server_type', true ) ?: 'whm', // Added Type
                 'host'        => get_post_meta( $s->ID, '_skyhshoso_whm_host', true ),
                 'user'        => get_post_meta( $s->ID, '_skyhshoso_whm_user_id', true ),
                 'token'       => get_post_meta( $s->ID, '_skyhshoso_whm_token', true ),
@@ -125,11 +126,9 @@ class SkyHSHOSO_Server_Manager {
             <h1><?php esc_html_e( 'Servers', 'skyhs-hosting-solution' ); ?></h1>
             <p><?php esc_html_e( 'Manage your WHM servers. Add a server to connect it, then create hosting products linked to its packages.', 'skyhs-hosting-solution' ); ?></p>
 
-            <!-- Notice area -->
             <div id="skyhshoso-sm-notice" class="notice" style="display:none;"></div>
 
             <div id="skyhshoso-sm-app">
-                <!-- Form panel -->
                 <div class="skyhshoso-sm-form-panel">
                     <div class="skyhshoso-sm-form-header">
                         <h2 id="skyhshoso-sm-form-title"><?php esc_html_e( 'Add New Server', 'skyhs-hosting-solution' ); ?></h2>
@@ -148,17 +147,28 @@ class SkyHSHOSO_Server_Manager {
                                     <p class="sm-field-desc"><?php esc_html_e( 'A label to identify this server in dropdowns.', 'skyhs-hosting-solution' ); ?></p>
                                 </div>
                             </div>
-                        </div>
-
-                        <div class="skyhshoso-sm-section">
-                            <h3><?php esc_html_e( 'WHM Connection', 'skyhs-hosting-solution' ); ?></h3>
-                            <p class="skyhshoso-sm-desc"><?php esc_html_e( 'Enter your WHM API credentials. A API token is recommended.', 'skyhs-hosting-solution' ); ?></p>
 
                             <div class="skyhshoso-sm-row">
                                 <div class="skyhshoso-sm-field">
-                                    <label for="sm_host"><?php esc_html_e( 'WHM Host', 'skyhs-hosting-solution' ); ?> <span class="req">*</span></label>
+                                    <label for="sm_type"><?php esc_html_e( 'Control Panel Type', 'skyhs-hosting-solution' ); ?> <span class="req">*</span></label>
+                                    <select id="sm_type" name="server_type" class="sm-input">
+                                        <option value="whm">cPanel / WHM</option>
+                                        <option value="hestiacp">HestiaCP</option>
+                                    </select>
+                                    <p class="sm-field-desc"><?php esc_html_e( 'Select the server control panel API.', 'skyhs-hosting-solution' ); ?></p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="skyhshoso-sm-section">
+                            <h3 id="sm_section_connection_title"><?php esc_html_e( 'Connection Settings', 'skyhs-hosting-solution' ); ?></h3>
+                            <p class="skyhshoso-sm-desc"><?php esc_html_e( 'Enter your API credentials to allow the dashboard to connect.', 'skyhs-hosting-solution' ); ?></p>
+
+                            <div class="skyhshoso-sm-row">
+                                <div class="skyhshoso-sm-field">
+                                    <label id="label_sm_host" for="sm_host"><?php esc_html_e( 'Host / IP Address', 'skyhs-hosting-solution' ); ?> <span class="req">*</span></label>
                                     <input type="text" id="sm_host" name="host" class="sm-input" placeholder="<?php esc_attr_e( 'e.g., node1.example.com', 'skyhs-hosting-solution' ); ?>" />
-                                    <p class="sm-field-desc"><?php esc_html_e( 'Server hostname or IP. Port 2087 (WHM) must be accessible.', 'skyhs-hosting-solution' ); ?></p>
+                                    <p class="sm-field-desc"><?php esc_html_e( 'Server hostname or IP.', 'skyhs-hosting-solution' ); ?></p>
                                 </div>
                             </div>
 
@@ -185,13 +195,13 @@ class SkyHSHOSO_Server_Manager {
 
                             <div class="skyhshoso-sm-row skyhshoso-sm-row-cols-2">
                                 <div class="skyhshoso-sm-field">
-                                    <label for="sm_user"><?php esc_html_e( 'WHM Username', 'skyhs-hosting-solution' ); ?> <span class="req">*</span></label>
+                                    <label id="label_sm_user" for="sm_user"><?php esc_html_e( 'Username', 'skyhs-hosting-solution' ); ?> <span class="req">*</span></label>
                                     <input type="text" id="sm_user" name="user" class="sm-input" placeholder="<?php esc_attr_e( 'e.g., root', 'skyhs-hosting-solution' ); ?>" />
                                 </div>
                                 <div class="skyhshoso-sm-field">
-                                    <label for="sm_token"><?php esc_html_e( 'WHM API Token', 'skyhs-hosting-solution' ); ?> <span class="req">*</span></label>
+                                    <label id="label_sm_token" for="sm_token"><?php esc_html_e( 'API Token', 'skyhs-hosting-solution' ); ?> <span class="req">*</span></label>
                                     <input type="password" id="sm_token" name="token" class="sm-input" />
-                                    <p class="sm-field-desc"><?php esc_html_e( 'Generate from WHM → API Tokens.', 'skyhs-hosting-solution' ); ?></p>
+                                    <p id="desc_sm_token" class="sm-field-desc"><?php esc_html_e( 'Generate from WHM → API Tokens.', 'skyhs-hosting-solution' ); ?></p>
                                 </div>
                             </div>
                         </div>
@@ -211,7 +221,6 @@ class SkyHSHOSO_Server_Manager {
                             </div>
                         </div>
 
-                        <!-- Test results -->
                         <div id="sm-test-results" class="skyhshoso-sm-test-results" style="display:none;">
                             <h4><?php esc_html_e( 'Connection Result', 'skyhs-hosting-solution' ); ?></h4>
                             <div id="sm-test-status"></div>
@@ -220,7 +229,6 @@ class SkyHSHOSO_Server_Manager {
                     </form>
                 </div>
 
-                <!-- Server list -->
                 <div class="skyhshoso-sm-list-panel">
                     <div class="skyhshoso-sm-list-header">
                         <h2><?php esc_html_e( 'Connected Servers', 'skyhs-hosting-solution' ); ?></h2>
@@ -233,6 +241,7 @@ class SkyHSHOSO_Server_Manager {
                     <?php else : ?>
                         <div id="skyhshoso-sm-server-list" class="skyhshoso-sm-server-list">
                             <?php foreach ( $servers as $server ) :
+                                $type = get_post_meta( $server->ID, '_skyhshoso_server_type', true ) ?: 'whm';
                                 $plans = get_post_meta( $server->ID, '_skyhshoso_whm_default_package_names', true );
                                 $plans = is_array( $plans ) ? $plans : array();
                                 $last_error = get_post_meta( $server->ID, '_skyhshoso_whm_last_error', true );
@@ -240,7 +249,10 @@ class SkyHSHOSO_Server_Manager {
                             ?>
                                 <div class="skyhshoso-sm-server-card" data-id="<?php echo esc_attr( $server->ID ); ?>">
                                     <div class="sm-card-top">
-                                        <h3><?php echo esc_html( $server->post_title ); ?></h3>
+                                        <h3>
+                                            <?php echo esc_html( $server->post_title ); ?> 
+                                            <span style="font-size:10px; background:#e2e8f0; padding:2px 6px; border-radius:4px; vertical-align:middle; font-weight:600; text-transform:uppercase; margin-left:8px;"><?php echo esc_html($type); ?></span>
+                                        </h3>
                                         <div class="sm-card-status">
                                             <?php if ( ! empty( $last_error ) ) : ?>
                                                 <span class="sm-status-dot sm-status-error"></span>
@@ -260,19 +272,21 @@ class SkyHSHOSO_Server_Manager {
                                             <span class="sm-detail-label"><?php esc_html_e( 'IP:', 'skyhs-hosting-solution' ); ?></span>
                                             <span class="sm-detail-value"><?php echo esc_html( get_post_meta( $server->ID, '_skyhshoso_server_ip', true ) ?: '—' ); ?></span>
                                         </div>
-                                        <div class="sm-card-detail">
-                                            <span class="sm-detail-label"><?php esc_html_e( 'Packages:', 'skyhs-hosting-solution' ); ?></span>
-                                            <span class="sm-detail-value"><?php echo count( $plans ) . ' ' . esc_html__( 'found', 'skyhs-hosting-solution' ); ?></span>
-                                        </div>
-                                        <?php if ( ! empty( $plans ) ) : ?>
-                                            <div class="sm-card-plans">
-                                                <?php foreach ( array_slice( $plans, 0, 4 ) as $pkg ) : ?>
-                                                    <span class="sm-plan-tag"><?php echo esc_html( ucwords( str_replace( '_', ' ', $pkg ) ) ); ?></span>
-                                                <?php endforeach; ?>
-                                                <?php if ( count( $plans ) > 4 ) : ?>
-                                                    <span class="sm-plan-tag sm-plan-more">+<?php echo count( $plans ) - 4; ?></span>
-                                                <?php endif; ?>
+                                        <?php if ($type === 'whm') : ?>
+                                            <div class="sm-card-detail">
+                                                <span class="sm-detail-label"><?php esc_html_e( 'Packages:', 'skyhs-hosting-solution' ); ?></span>
+                                                <span class="sm-detail-value"><?php echo count( $plans ) . ' ' . esc_html__( 'found', 'skyhs-hosting-solution' ); ?></span>
                                             </div>
+                                            <?php if ( ! empty( $plans ) ) : ?>
+                                                <div class="sm-card-plans">
+                                                    <?php foreach ( array_slice( $plans, 0, 4 ) as $pkg ) : ?>
+                                                        <span class="sm-plan-tag"><?php echo esc_html( ucwords( str_replace( '_', ' ', $pkg ) ) ); ?></span>
+                                                    <?php endforeach; ?>
+                                                    <?php if ( count( $plans ) > 4 ) : ?>
+                                                        <span class="sm-plan-tag sm-plan-more">+<?php echo count( $plans ) - 4; ?></span>
+                                                    <?php endif; ?>
+                                                </div>
+                                            <?php endif; ?>
                                         <?php endif; ?>
                                     </div>
                                     <div class="sm-card-actions">
@@ -281,9 +295,6 @@ class SkyHSHOSO_Server_Manager {
                                         </button>
                                         <button type="button" class="button button-small sm-sync-server" data-id="<?php echo esc_attr( $server->ID ); ?>">
                                             <?php esc_html_e( 'Sync', 'skyhs-hosting-solution' ); ?>
-                                        </button>
-                                        <button type="button" class="button button-small sm-sync-cpanel" data-id="<?php echo esc_attr( $server->ID ); ?>">
-                                            <?php esc_html_e( 'Sync cPanel', 'skyhs-hosting-solution' ); ?>
                                         </button>
                                         <button type="button" class="button button-small sm-delete-server" data-id="<?php echo esc_attr( $server->ID ); ?>">
                                             <?php esc_html_e( 'Delete', 'skyhs-hosting-solution' ); ?>
@@ -296,16 +307,51 @@ class SkyHSHOSO_Server_Manager {
                 </div>
             </div>
         </div>
+
+        <script>
+        jQuery(document).ready(function($) {
+            // Dynamic Label Swapping based on Server Type
+            $('#sm_type').on('change', function() {
+                var type = $(this).val();
+                if (type === 'hestiacp') {
+                    $('#label_sm_host').html('HestiaCP Host / IP <span class="req">*</span>');
+                    $('#label_sm_user').html('HestiaCP Access Key ID <span class="req">*</span>');
+                    $('#label_sm_token').html('HestiaCP Secret Key <span class="req">*</span>');
+                    $('#desc_sm_token').html('Generate from HestiaCP Admin -> Access Keys.');
+                    $('#sm_user').attr('placeholder', 'e.g., admin_xxxxxx');
+                } else {
+                    $('#label_sm_host').html('WHM Host <span class="req">*</span>');
+                    $('#label_sm_user').html('WHM Username <span class="req">*</span>');
+                    $('#label_sm_token').html('WHM API Token <span class="req">*</span>');
+                    $('#desc_sm_token').html('Generate from WHM → API Tokens.');
+                    $('#sm_user').attr('placeholder', 'e.g., root');
+                }
+            });
+
+            // Hijack the "Edit Server" button to prepopulate the type dropdown properly!
+            $(document).on('click', '.sm-edit-server', function() {
+                var serverId = $(this).data('id');
+                // Find the server object in the JS array that was printed via wp_localize_script
+                var serverData = skyhshoso_sm.servers.find(s => s.id == serverId);
+                
+                if (serverData && serverData.type) {
+                    $('#sm_type').val(serverData.type).trigger('change');
+                } else {
+                    $('#sm_type').val('whm').trigger('change');
+                }
+            });
+            
+            // Run once on load to ensure defaults are set
+            $('#sm_type').trigger('change');
+        });
+        </script>
         <?php
     }
 
-    // -------------------------------------------------------------------------
+// -------------------------------------------------------------------------
     // AJAX handlers
     // -------------------------------------------------------------------------
 
-    /**
-     * Save (create or update) a server.
-     */
     public function ajax_save_server() {
         if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_key( $_POST['nonce'] ), 'skyhshoso_save_server' ) ) {
             wp_send_json_error( array( 'message' => __( 'Security check failed.', 'skyhs-hosting-solution' ) ) );
@@ -316,52 +362,41 @@ class SkyHSHOSO_Server_Manager {
 
         $server_id = isset( $_POST['server_id'] ) ? intval( $_POST['server_id'] ) : 0;
         $name      = isset( $_POST['name'] ) ? sanitize_text_field( wp_unslash( $_POST['name'] ) ) : '';
+        $type      = isset( $_POST['server_type'] ) ? sanitize_text_field( wp_unslash( $_POST['server_type'] ) ) : 'whm';
         $host      = isset( $_POST['host'] ) ? sanitize_text_field( wp_unslash( $_POST['host'] ) ) : '';
         $user      = isset( $_POST['user'] ) ? sanitize_text_field( wp_unslash( $_POST['user'] ) ) : '';
         $token     = isset( $_POST['token'] ) ? sanitize_text_field( wp_unslash( $_POST['token'] ) ) : '';
         $server_ip = isset( $_POST['server_ip'] ) ? sanitize_text_field( wp_unslash( $_POST['server_ip'] ) ) : '';
         $nameservers = isset( $_POST['nameservers'] ) && is_array( $_POST['nameservers'] ) ? $_POST['nameservers'] : array();
 
-		if ( empty( $name ) || empty( $host ) || empty( $user ) ) {
-			SkyHSHOSO_Logger::error( 'Server save failed: missing required fields', array( 'source' => 'server_manager' ) );
-			wp_send_json_error( array( 'message' => __( 'All fields are required.', 'skyhs-hosting-solution' ) ) );
-		}
+        if ( empty( $name ) || empty( $host ) || empty( $user ) ) {
+            wp_send_json_error( array( 'message' => __( 'All fields are required.', 'skyhs-hosting-solution' ) ) );
+        }
 
-		if ( $server_id ) {
-            // Update existing server post
-            wp_update_post( array(
-                'ID'         => $server_id,
-                'post_title' => $name,
-            ) );
+        if ( $server_id ) {
+            wp_update_post( array( 'ID' => $server_id, 'post_title' => $name ) );
         } else {
-			// Require token when creating a new server
-			if ( empty( $token ) ) {
-				SkyHSHOSO_Logger::error( 'Server creation failed: token is required for new servers', array( 'source' => 'server_manager' ) );
-				wp_send_json_error( array( 'message' => __( 'Token is required for new servers.', 'skyhs-hosting-solution' ) ) );
-			}
-
-			// Create new server post
+            if ( empty( $token ) ) {
+                wp_send_json_error( array( 'message' => __( 'Token is required for new servers.', 'skyhs-hosting-solution' ) ) );
+            }
             $server_id = wp_insert_post( array(
                 'post_type'   => 'skyhshoso_server',
                 'post_title'  => $name,
                 'post_status' => 'publish',
             ) );
-
-			if ( is_wp_error( $server_id ) ) {
-				SkyHSHOSO_Logger::error( 'Server post creation failed: ' . $server_id->get_error_message(), array( 'source' => 'server_manager' ) );
-				wp_send_json_error( array( 'message' => $server_id->get_error_message() ) );
-			}
+            if ( is_wp_error( $server_id ) ) {
+                wp_send_json_error( array( 'message' => $server_id->get_error_message() ) );
+            }
         }
 
-        // Save WHM credentials
+        // Save server metadata
+        update_post_meta( $server_id, '_skyhshoso_server_type', $type );
         update_post_meta( $server_id, '_skyhshoso_whm_user_id', $user );
 
-        // Keep existing token if placeholder was sent or token is empty in edit mode
         if ( $token === 'EXISTING_TOKEN_PLACEHOLDER' || ( $server_id && empty( $token ) ) ) {
             $token = get_post_meta( $server_id, '_skyhshoso_whm_token', true );
         }
         update_post_meta( $server_id, '_skyhshoso_whm_token', $token );
-
         update_post_meta( $server_id, '_skyhshoso_whm_host', $host );
 
         if ( ! empty( $server_ip ) ) {
@@ -374,18 +409,17 @@ class SkyHSHOSO_Server_Manager {
         foreach ( $nameservers as $ns ) {
             $sanitized_ns[] = sanitize_text_field( wp_unslash( $ns ) );
         }
-        $filtered_ns = array_filter( $sanitized_ns );
-        if ( ! empty( $filtered_ns ) ) {
+        if ( ! empty( array_filter( $sanitized_ns ) ) ) {
             update_post_meta( $server_id, '_skyhshoso_server_nameservers', $sanitized_ns );
         } else {
             delete_post_meta( $server_id, '_skyhshoso_server_nameservers' );
         }
 
-        // Sync WHM packages
-        $this->sync_whm_packages( $server_id );
+        // 1. Unified Factory Package Sync!
+        $this->sync_server_packages( $server_id );
 
-        // Auto-sync cPanel accounts into cache table
-        if ( class_exists( 'SkyHSHOSO_CPanel_Sync' ) ) {
+        // 2. WHM specific cPanel account cache sync (we will adapt this for Hestia later)
+        if ( $type === 'whm' && class_exists( 'SkyHSHOSO_CPanel_Sync' ) ) {
             SkyHSHOSO_CPanel_Sync::instance()->sync_server_accounts( $server_id );
         }
 
@@ -397,9 +431,6 @@ class SkyHSHOSO_Server_Manager {
         ) );
     }
 
-    /**
-     * Delete a server.
-     */
     public function ajax_delete_server() {
         if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_key( $_POST['nonce'] ), 'skyhshoso_delete_server' ) ) {
             wp_send_json_error( array( 'message' => __( 'Security check failed.', 'skyhs-hosting-solution' ) ) );
@@ -408,25 +439,15 @@ class SkyHSHOSO_Server_Manager {
             wp_send_json_error( array( 'message' => __( 'Permission denied.', 'skyhs-hosting-solution' ) ) );
         }
 
-		$server_id = isset( $_POST['server_id'] ) ? intval( $_POST['server_id'] ) : 0;
-		if ( ! $server_id ) {
-			SkyHSHOSO_Logger::error( 'Server delete failed: invalid server ID', array( 'source' => 'server_manager' ) );
-			wp_send_json_error( array( 'message' => __( 'Invalid server.', 'skyhs-hosting-solution' ) ) );
-		}
+        $server_id = isset( $_POST['server_id'] ) ? intval( $_POST['server_id'] ) : 0;
+        if ( ! $server_id ) {
+            wp_send_json_error( array( 'message' => __( 'Invalid server.', 'skyhs-hosting-solution' ) ) );
+        }
 
-		$post = get_post( $server_id );
-		if ( ! $post || 'skyhshoso_server' !== $post->post_type ) {
-			SkyHSHOSO_Logger::error( 'Server delete failed: server not found (ID: ' . $server_id . ')', array( 'source' => 'server_manager' ) );
-			wp_send_json_error( array( 'message' => __( 'Server not found.', 'skyhs-hosting-solution' ) ) );
-		}
-
-		wp_delete_post( $server_id, true );
+        wp_delete_post( $server_id, true );
         wp_send_json_success( array( 'message' => __( 'Server deleted.', 'skyhs-hosting-solution' ) ) );
     }
 
-    /**
-     * Test WHM connection and return packages.
-     */
     public function ajax_test_whm() {
         if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_key( $_POST['nonce'] ), 'skyhshoso_test_whm' ) ) {
             wp_send_json_error( array( 'message' => __( 'Security check failed.', 'skyhs-hosting-solution' ) ) );
@@ -435,76 +456,64 @@ class SkyHSHOSO_Server_Manager {
             wp_send_json_error( array( 'message' => __( 'Permission denied.', 'skyhs-hosting-solution' ) ) );
         }
 
+        $type  = isset( $_POST['server_type'] ) ? sanitize_text_field( wp_unslash( $_POST['server_type'] ) ) : 'whm';
         $host  = isset( $_POST['host'] ) ? sanitize_text_field( wp_unslash( $_POST['host'] ) ) : '';
         $user  = isset( $_POST['user'] ) ? sanitize_text_field( wp_unslash( $_POST['user'] ) ) : '';
         $token = isset( $_POST['token'] ) ? sanitize_text_field( wp_unslash( $_POST['token'] ) ) : '';
 
         if ( empty( $host ) || empty( $user ) || empty( $token ) ) {
-            wp_send_json_error( array( 'message' => __( 'Fill WHM credentials first.', 'skyhs-hosting-solution' ) ) );
+            wp_send_json_error( array( 'message' => __( 'Fill credentials first.', 'skyhs-hosting-solution' ) ) );
         }
 
-        require_once SKYHSHOSO_PLUGIN_DIR . 'includes/class-whm-integration.php';
-        $whm  = new SkyHSHOSO_WHM_Integration( $user, $token, $host );
-        $pkgs = $whm->get_packages();
-
-		if ( is_wp_error( $pkgs ) ) {
-			SkyHSHOSO_Logger::error( 'WHM test connection failed: ' . $pkgs->get_error_message(), array( 'source' => 'server_manager' ) );
-			wp_send_json_error( array( 'message' => $pkgs->get_error_message() ) );
-		}
-
-        if ( empty( $pkgs ) ) {
-            wp_send_json_success( array(
-                'message' => __( 'Connected successfully, but no packages found.', 'skyhs-hosting-solution' ),
-                'plans'   => array(),
-            ) );
+        // Initialize the correct Driver manually for the connection test
+        if ( $type === 'hestiacp' ) {
+            $driver = new SkyHSHOSO_HestiaCP_Driver($host, $user, $token);
+        } else {
+            $driver = new SkyHSHOSO_WHM_Driver($host, $user, $token);
         }
 
-        // Filter for default feature list
-        $default_names = array();
-        foreach ( $pkgs as $pkg ) {
-            if ( isset( $pkg['FEATURELIST'] ) && 'default' === $pkg['FEATURELIST'] ) {
-                $default_names[] = $pkg['name'];
-            }
+        // 1. Test Connection
+        $test = $driver->test_connection();
+        if ( is_wp_error( $test ) ) {
+            wp_send_json_error( array( 'message' => $test->get_error_message() ) );
         }
 
+        // 2. Fetch Packages
+        $packages = $driver->get_packages();
+        if ( is_wp_error( $packages ) ) {
+            wp_send_json_error( array( 'message' => $packages->get_error_message() ) );
+        }
+
+        // 3. Format Packages for the UI Dropdown
         $formatted = array();
-        foreach ( $default_names as $pkg ) {
+        foreach ( $packages as $pkg ) {
             $formatted[ $pkg ] = ucwords( str_replace( '_', ' ', $pkg ) );
         }
 
         wp_send_json_success( array(
-            'message' => sprintf( __( 'Connected! Found %d packages with default feature list.', 'skyhs-hosting-solution' ), count( $formatted ) ),
+            'message' => sprintf( __( 'Connected! Found %d packages ready to sync.', 'skyhs-hosting-solution' ), count( $formatted ) ),
             'plans'   => $formatted,
         ) );
     }
 
-    /**
-     * Sync WHM packages for a server ID.
-     */
-    private function sync_whm_packages( $server_id ) {
-        $whm_user = get_post_meta( $server_id, '_skyhshoso_whm_user_id', true );
-        $whm_token = get_post_meta( $server_id, '_skyhshoso_whm_token', true );
-        $whm_host = get_post_meta( $server_id, '_skyhshoso_whm_host', true );
-
-        if ( ! $whm_user || ! $whm_token || ! $whm_host ) {
+    private function sync_server_packages( $server_id ) {
+        $driver = SkyHSHOSO_Provider_Factory::get_driver($server_id);
+        
+        if ( is_wp_error($driver) ) {
+            update_post_meta( $server_id, '_skyhshoso_whm_last_error', $driver->get_error_message() );
             return;
         }
 
-        require_once SKYHSHOSO_PLUGIN_DIR . 'includes/class-whm-integration.php';
-        $whm = new SkyHSHOSO_WHM_Integration( $whm_user, $whm_token, $whm_host );
-        $result = $whm->save_packages( $server_id );
-
+        $packages = $driver->get_packages();
         update_post_meta( $server_id, '_skyhshoso_whm_last_sync_time', current_time( 'mysql' ) );
 
-		if ( false === $result ) {
-			$err = get_post_meta( $server_id, '_skyhshoso_whm_last_error', true );
-			if ( empty( $err ) ) {
-				$err = __( 'Sync completed but no default packages found.', 'skyhs-hosting-solution' );
-				update_post_meta( $server_id, '_skyhshoso_whm_last_error', $err );
-			}
-			SkyHSHOSO_Logger::error( 'WHM package sync failed for server ' . $server_id . ': ' . $err, array( 'source' => 'server_manager' ) );
-		} else {
+        if ( ! is_wp_error($packages) && is_array($packages) ) {
+            // By using the original WHM meta key, the WooCommerce products editor will automatically list HestiaCP packages perfectly!
+            update_post_meta( $server_id, '_skyhshoso_whm_default_package_names', $packages );
             delete_post_meta( $server_id, '_skyhshoso_whm_last_error' );
+        } else {
+            $err = is_wp_error($packages) ? $packages->get_error_message() : __( 'No packages found.', 'skyhs-hosting-solution' );
+            update_post_meta( $server_id, '_skyhshoso_whm_last_error', $err );
         }
     }
 }

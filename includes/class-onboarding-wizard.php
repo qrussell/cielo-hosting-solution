@@ -134,35 +134,41 @@ class SkyHSHOSO_Onboarding_Wizard {
 
             <div class="skyhshoso-wizard-content">
                 
-                <!-- Step 1: Create Server -->
                 <div id="step-1" class="skyhshoso-wizard-step active">
-                    <h2><?php esc_html_e( 'Connect Your WHM Server', 'skyhs-hosting-solution' ); ?></h2>
-                    <p><?php esc_html_e( 'Enter your WHM credentials. We will connect and fetch your packages automatically.', 'skyhs-hosting-solution' ); ?></p>
+                    <h2><?php esc_html_e( 'Connect Your Server', 'skyhs-hosting-solution' ); ?></h2>
+                    <p><?php esc_html_e( 'Select your control panel and enter your credentials. We will connect automatically.', 'skyhs-hosting-solution' ); ?></p>
                     
                     <div class="skyhshoso-wizard-notice"></div>
 
                     <div class="skyhshoso-wizard-form-group">
-                        <label for="server_name"><?php esc_html_e( 'Server Name', 'skyhs-hosting-solution' ); ?> <span style="color:red;">*</span></label>
+                        <label for="server_type"><?php esc_html_e( 'Control Panel Type', 'skyhs-hosting-solution' ); ?> <span style="color:red;">*</span></label>
+                        <select id="server_type" name="server_type" style="width:100%; padding:8px; border-radius:4px;">
+                            <option value="whm">cPanel / WHM</option>
+                            <option value="hestiacp">HestiaCP</option>
+                        </select>
+                    </div>
+
+                    <div class="skyhshoso-wizard-form-group">
+                        <label for="server_name"><?php esc_html_e( 'Server Nickname', 'skyhs-hosting-solution' ); ?> <span style="color:red;">*</span></label>
                         <input type="text" id="server_name" name="server_name" placeholder="<?php esc_attr_e( 'e.g., US Server 1', 'skyhs-hosting-solution' ); ?>" />
                     </div>
                     <div class="skyhshoso-wizard-form-group">
-                        <label for="whm_host"><?php esc_html_e( 'WHM Host', 'skyhs-hosting-solution' ); ?> <span style="color:red;">*</span></label>
+                        <label id="label_whm_host" for="whm_host"><?php esc_html_e( 'Host / IP Address', 'skyhs-hosting-solution' ); ?> <span style="color:red;">*</span></label>
                         <input type="text" id="whm_host" name="whm_host" placeholder="<?php esc_attr_e( 'e.g., node.example.com', 'skyhs-hosting-solution' ); ?>" />
                     </div>
                     <div class="skyhshoso-wizard-form-group">
-                        <label for="whm_user_id"><?php esc_html_e( 'WHM User ID', 'skyhs-hosting-solution' ); ?> <span style="color:red;">*</span></label>
+                        <label id="label_whm_user_id" for="whm_user_id"><?php esc_html_e( 'Username', 'skyhs-hosting-solution' ); ?> <span style="color:red;">*</span></label>
                         <input type="text" id="whm_user_id" name="whm_user_id" placeholder="<?php esc_attr_e( 'e.g., root', 'skyhs-hosting-solution' ); ?>" />
                     </div>
                     <div class="skyhshoso-wizard-form-group">
-                        <label for="whm_token"><?php esc_html_e( 'WHM Token', 'skyhs-hosting-solution' ); ?> <span style="color:red;">*</span></label>
+                        <label id="label_whm_token" for="whm_token"><?php esc_html_e( 'API Token', 'skyhs-hosting-solution' ); ?> <span style="color:red;">*</span></label>
                         <input type="password" id="whm_token" name="whm_token" />
                     </div>
 
                     <div id="wizard-packages-container" class="skyhshoso-wizard-packages" style="display:none;"></div>
 
                     <div class="skyhshoso-wizard-actions">
-                        <div></div> <!-- Empty for flex spacing -->
-                        <div>
+                        <div></div> <div>
                             <span class="skyhshoso-loader"></span>
                             <button id="save-server-btn" class="skyhshoso-wizard-btn skyhshoso-wizard-btn-primary"><?php esc_html_e( 'Connect & Continue', 'skyhs-hosting-solution' ); ?></button>
                             <a href="#" class="skyhshoso-wizard-btn skyhshoso-wizard-btn-secondary skip-step" style="margin-left:10px;"><?php esc_html_e( 'Skip', 'skyhs-hosting-solution' ); ?></a>
@@ -170,7 +176,32 @@ class SkyHSHOSO_Onboarding_Wizard {
                     </div>
                 </div>
 
-                <!-- Step 2: Connect Enom -->
+                <script>
+                jQuery(document).ready(function($) {
+                    $('#server_type').on('change', function() {
+                        var type = $(this).val();
+                        if (type === 'hestiacp') {
+                            $('#label_whm_host').html('HestiaCP Host / IP <span style="color:red;">*</span>');
+                            $('#label_whm_user_id').html('HestiaCP Access Key ID <span style="color:red;">*</span>');
+                            $('#label_whm_token').html('HestiaCP Secret Key <span style="color:red;">*</span>');
+                            $('#whm_user_id').attr('placeholder', 'e.g., admin_xxxxxx');
+                        } else {
+                            $('#label_whm_host').html('WHM Host / IP <span style="color:red;">*</span>');
+                            $('#label_whm_user_id').html('WHM Username (root) <span style="color:red;">*</span>');
+                            $('#label_whm_token').html('WHM API Token <span style="color:red;">*</span>');
+                            $('#whm_user_id').attr('placeholder', 'e.g., root');
+                        }
+                    });
+
+                    // Intercept the AJAX call to ensure our new Server Type field gets sent to PHP!
+                    $(document).ajaxSend(function(event, jqxhr, settings) {
+                        if (settings.data && settings.data.indexOf('action=skyhshoso_wizard_save_server') !== -1) {
+                            settings.data += '&server_type=' + $('#server_type').val();
+                        }
+                    });
+                });
+                </script>
+
                 <div id="step-2" class="skyhshoso-wizard-step">
                     <h2><?php esc_html_e( 'Connect Enom Reseller', 'skyhs-hosting-solution' ); ?></h2>
                     <p><?php esc_html_e( 'Connect your Enom account for domain registration services.', 'skyhs-hosting-solution' ); ?></p>
@@ -211,7 +242,6 @@ class SkyHSHOSO_Onboarding_Wizard {
                     </div>
                 </div>
 
-                <!-- Step 3: Setup Dashboard -->
                 <div id="step-3" class="skyhshoso-wizard-step">
                     <h2><?php esc_html_e( 'Dashboard Setup', 'skyhs-hosting-solution' ); ?></h2>
                     <p><?php esc_html_e( 'We need a page to display the user dashboard using the shortcode [skyhshoso_dashboard].', 'skyhs-hosting-solution' ); ?></p>
@@ -267,6 +297,7 @@ class SkyHSHOSO_Onboarding_Wizard {
             wp_send_json_error( __( 'Unauthorized', 'skyhs-hosting-solution' ) );
         }
 
+        $server_type = isset( $_POST['server_type'] ) ? sanitize_text_field( wp_unslash( $_POST['server_type'] ) ) : 'whm';
         $server_name = isset( $_POST['server_name'] ) ? sanitize_text_field( wp_unslash( $_POST['server_name'] ) ) : '';
         $whm_user_id = isset( $_POST['whm_user_id'] ) ? sanitize_text_field( wp_unslash( $_POST['whm_user_id'] ) ) : '';
         $whm_token   = isset( $_POST['whm_token'] ) ? sanitize_text_field( wp_unslash( $_POST['whm_token'] ) ) : '';
@@ -276,12 +307,20 @@ class SkyHSHOSO_Onboarding_Wizard {
             wp_send_json_error( __( 'Missing required fields.', 'skyhs-hosting-solution' ) );
         }
 
-        // Test connection first
-        $whm = new SkyHSHOSO_WHM_Integration( $whm_user_id, $whm_token, $whm_host );
-        $packages = $whm->get_packages();
-
-        if ( is_wp_error( $packages ) ) {
-            wp_send_json_error( $packages->get_error_message() );
+        // Test connection using our new Factory architecture!
+        if ( $server_type === 'hestiacp' ) {
+            $driver = new SkyHSHOSO_HestiaCP_Driver($whm_host, $whm_user_id, $whm_token);
+            $test = $driver->test_connection();
+            if ( is_wp_error( $test ) ) {
+                wp_send_json_error( $test->get_error_message() );
+            }
+            $packages = array(); // Hestia uses a slightly different package system, we can sync later.
+        } else {
+            $whm = new SkyHSHOSO_WHM_Integration( $whm_user_id, $whm_token, $whm_host );
+            $packages = $whm->get_packages();
+            if ( is_wp_error( $packages ) ) {
+                wp_send_json_error( $packages->get_error_message() );
+            }
         }
 
         // Connection successful, create server post
@@ -295,15 +334,17 @@ class SkyHSHOSO_Onboarding_Wizard {
             wp_send_json_error( __( 'Failed to create server.', 'skyhs-hosting-solution' ) );
         }
 
+        update_post_meta( $post_id, '_skyhshoso_server_type', $server_type );
         update_post_meta( $post_id, '_skyhshoso_whm_user_id', $whm_user_id );
         update_post_meta( $post_id, '_skyhshoso_whm_token', $whm_token );
         update_post_meta( $post_id, '_skyhshoso_whm_host', $whm_host );
 
-        // Save packages
-        $whm->save_packages( $post_id );
-
-        // Get default packages to return
-        $default_names = get_post_meta( $post_id, '_skyhshoso_whm_default_package_names', true );
+        if ( $server_type === 'whm' ) {
+            $whm->save_packages( $post_id );
+            $default_names = get_post_meta( $post_id, '_skyhshoso_whm_default_package_names', true );
+        } else {
+            $default_names = array();
+        }
 
         wp_send_json_success( array(
             'message' => __( 'Server connected and saved successfully!', 'skyhs-hosting-solution' ),
