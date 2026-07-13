@@ -25,6 +25,10 @@ class SkyHSHOSO_Subscription_Handler {
 
         // Plan switch is now a manual admin action
         add_action( 'skyhshoso_subscription_switch_completed', array( $this, 'handle_subscription_switch' ), 10, 2 );
+        
+        // --- NEW ASYNC BACKGROUND PROCESS LISTENER ---
+        // Listens for the queued ticket and runs the heavy WHM API calls in the background
+        add_action( 'skyhshoso_background_provision_account', array( $this, 'execute_whm_provisioning' ), 10, 2 );
     }
 
     public function declare_hpos_compatibility() {
@@ -105,11 +109,11 @@ class SkyHSHOSO_Subscription_Handler {
             'post_status'   => 'publish',
             'post_name'     => '' 
         );
-		$post_id = wp_insert_post($post_data);
-		
-		if (is_wp_error($post_id)) {
-			SkyHSHOSO_Logger::error( 'Hosting post creation failed for subscription #' . $subscription->get_id() . ': ' . $post_id->get_error_message(), array( 'source' => 'subscription_handler' ) );
-		} else {
+        $post_id = wp_insert_post($post_data);
+        
+        if (is_wp_error($post_id)) {
+            SkyHSHOSO_Logger::error( 'Hosting post creation failed for subscription #' . $subscription->get_id() . ': ' . $post_id->get_error_message(), array( 'source' => 'subscription_handler' ) );
+        } else {
             
             $post_name = $post_id;
             wp_update_post(array(
@@ -144,7 +148,7 @@ class SkyHSHOSO_Subscription_Handler {
             $username = 'cielo' . $unique_id;
             $temp_password = wp_generate_password(16, true, true);
 
-            // FIX: Connect the WC Product directly to the Hosting Post so it shows up in the admin panel!
+            // Connect the WC Product directly to the Hosting Post so it shows up in the admin panel!
             update_post_meta($post_id, '_skyhshoso_hosting_product_id', $product_id);
             if ($parent_id) {
                 update_post_meta($post_id, '_skyhshoso_variation_id', $product->get_id());
@@ -159,38 +163,60 @@ class SkyHSHOSO_Subscription_Handler {
             update_post_meta($post_id, 'skyhshoso_hosting_plan', $hosting_plan);
             update_post_meta($post_id, 'skyhshoso_server_id', $server_id);
 
-            // === TRIGGER WHM ACCOUNT CREATION IMMEDIATELY ===
-            if ($server_id && $hosting_plan) {
-                $whm_username = get_post_meta($server_id, '_skyhshoso_whm_user_id', true);
-                $whm_token = get_post_meta($server_id, '_skyhshoso_whm_token', true);
-                $whm_host = get_post_meta($server_id, '_skyhshoso_whm_host', true);
-                
-                if ($whm_username && $whm_token && $whm_host) {
-                    if (!class_exists('SkyHSHOSO_WHM_API')) {
-                        require_once dirname(__FILE__) . '/class-whm-integration.php';
-                    }
-                    $whm_api = new SkyHSHOSO_WHM_API($whm_username, $whm_token, $whm_host);
-                    
-                    $whm_result = $whm_api->create_whm_account($post_id, $system_domain);
-                    
-                    if (is_wp_error($whm_result)) {
-                        update_post_meta($post_id, '_skyhshoso_whm_provision_error', 'WHM Rejection: ' . $whm_result->get_error_message());
-                        update_post_meta($post_id, '_skyhshoso_whm_provision_status', 'failed');
-                    } else {
-                        update_post_meta($post_id, '_skyhshoso_whm_provision_status', 'success');
-                        delete_post_meta($post_id, '_skyhshoso_whm_provision_error');
+            // --- DECOUPLED ASYNC BACKGROUND EXECUTION ---
+            // Instead of halting the checkout, we instantly drop a ticket in Action Scheduler
+            if ( function_exists( 'as_enqueue_async_action' ) ) {
+                update_post_meta($post_id, '_skyhshoso_whm_provision_status', 'provisioning');
+                as_enqueue_async_action( 'skyhshoso_background_provision_account', array( 'post_id' => $post_id, 'system_domain' => $system_domain ) );
+            } else {
+                // Fallback just in case WooCommerce Action Scheduler is somehow disabled
+                $this->execute_whm_provisioning( $post_id, $system_domain );
+            }
+        }
+    }
 
-                        if (class_exists('SkyHSHOSO_Emails')) {
-                            SkyHSHOSO_Emails::send_provisioning($post_id, $username);
-                        }
-                    }
+    /**
+     * NEW FUNCTION: Executes the heavy WHM API calls in the background.
+     * This takes the load off the checkout flow completely.
+     */
+    public function execute_whm_provisioning( $post_id, $system_domain ) {
+        $server_id = get_post_meta($post_id, 'skyhshoso_server_id', true);
+        $hosting_plan = get_post_meta($post_id, 'skyhshoso_hosting_plan', true);
+        $username = get_post_meta($post_id, 'skyhshoso_hosting_username', true);
+
+        if ($server_id && $hosting_plan) {
+            $whm_username = get_post_meta($server_id, '_skyhshoso_whm_user_id', true);
+            $whm_token = get_post_meta($server_id, '_skyhshoso_whm_token', true);
+            $whm_host = get_post_meta($server_id, '_skyhshoso_whm_host', true);
+            
+            if ($whm_username && $whm_token && $whm_host) {
+                if (!class_exists('SkyHSHOSO_WHM_API')) {
+                    require_once dirname(__FILE__) . '/class-whm-integration.php';
+                }
+                $whm_api = new SkyHSHOSO_WHM_API($whm_username, $whm_token, $whm_host);
+                
+                // This is the heavy lifting function that triggers WP Toolkit.
+                $whm_result = $whm_api->create_whm_account($post_id, $system_domain);
+                
+                if (is_wp_error($whm_result)) {
+                    update_post_meta($post_id, '_skyhshoso_whm_provision_error', 'WHM Rejection: ' . $whm_result->get_error_message());
+                    update_post_meta($post_id, '_skyhshoso_whm_provision_status', 'failed');
                 } else {
-                    update_post_meta($post_id, '_skyhshoso_whm_provision_error', 'Missing WHM credentials on Server ID ' . $server_id);
+                    update_post_meta($post_id, '_skyhshoso_whm_provision_status', 'success');
+                    delete_post_meta($post_id, '_skyhshoso_whm_provision_error');
+
+                    // ONLY send the welcome email after the site actually exists.
+                    if (class_exists('SkyHSHOSO_Emails')) {
+                        SkyHSHOSO_Emails::send_provisioning($post_id, $username);
+                    }
                 }
             } else {
-                update_post_meta($post_id, '_skyhshoso_whm_provision_error', 'Missing Server ID or Hosting Plan on the WooCommerce Product.');
+                update_post_meta($post_id, '_skyhshoso_whm_provision_error', 'Missing WHM credentials on Server ID ' . $server_id);
+                update_post_meta($post_id, '_skyhshoso_whm_provision_status', 'failed');
             }
-            // ================================================
+        } else {
+            update_post_meta($post_id, '_skyhshoso_whm_provision_error', 'Missing Server ID or Hosting Plan on the WooCommerce Product.');
+            update_post_meta($post_id, '_skyhshoso_whm_provision_status', 'failed');
         }
     }
 
@@ -223,18 +249,18 @@ class SkyHSHOSO_Subscription_Handler {
             'post_status'   => 'publish'
         );
         
-		$post_id = wp_insert_post($post_data);
-		
-		if (is_wp_error($post_id)) {
-			SkyHSHOSO_Logger::error( 'Domain post creation failed for subscription #' . $subscription->get_id() . ': ' . $post_id->get_error_message(), array( 'source' => 'subscription_handler' ) );
-			return;
-		}
-		
-		update_post_meta($post_id, 'skyhshoso_subscription_id', $subscription->get_id());
-		update_post_meta($post_id, 'skyhshoso_domain_name', $post_title);
-		update_post_meta($post_id, '_skyhshoso_domain_product_id', $product_id);
-		
-		try {
+        $post_id = wp_insert_post($post_data);
+        
+        if (is_wp_error($post_id)) {
+            SkyHSHOSO_Logger::error( 'Domain post creation failed for subscription #' . $subscription->get_id() . ': ' . $post_id->get_error_message(), array( 'source' => 'subscription_handler' ) );
+            return;
+        }
+        
+        update_post_meta($post_id, 'skyhshoso_subscription_id', $subscription->get_id());
+        update_post_meta($post_id, 'skyhshoso_domain_name', $post_title);
+        update_post_meta($post_id, '_skyhshoso_domain_product_id', $product_id);
+        
+        try {
             $enom = SkyHSHOSO_Enom_Integration();
             $customer = new WC_Customer($order->get_customer_id());
             
@@ -299,14 +325,14 @@ class SkyHSHOSO_Subscription_Handler {
                 }
             }
             
-		} catch (Exception $e) {
-			update_post_meta($post_id, 'skyhshoso_domain_purchase_status', 'failed');
-			update_post_meta($post_id, 'skyhshoso_domain_purchase_error', $e->getMessage());
-			if ($is_transfer) {
-				update_post_meta($post_id, 'skyhshoso_domain_transfer_status', 'failed');
-			}
-			SkyHSHOSO_Logger::error( 'Domain ' . ( $is_transfer ? 'transfer' : 'purchase' ) . ' failed for ' . $post_title . ' (order #' . $order->get_id() . '): ' . $e->getMessage(), array( 'source' => 'subscription_handler' ) );
-		}
+        } catch (Exception $e) {
+            update_post_meta($post_id, 'skyhshoso_domain_purchase_status', 'failed');
+            update_post_meta($post_id, 'skyhshoso_domain_purchase_error', $e->getMessage());
+            if ($is_transfer) {
+                update_post_meta($post_id, 'skyhshoso_domain_transfer_status', 'failed');
+            }
+            SkyHSHOSO_Logger::error( 'Domain ' . ( $is_transfer ? 'transfer' : 'purchase' ) . ' failed for ' . $post_title . ' (order #' . $order->get_id() . '): ' . $e->getMessage(), array( 'source' => 'subscription_handler' ) );
+        }
     }
 
     private function create_wp_site_post($subscription, $order, $product, $parent_id = 0) {
@@ -332,12 +358,12 @@ class SkyHSHOSO_Subscription_Handler {
             'post_status' => 'publish',
         ) );
 
-		if ( is_wp_error( $post_id ) ) {
-			SkyHSHOSO_Logger::error( 'WP site post creation failed for subscription #' . $subscription->get_id() . ': ' . $post_id->get_error_message(), array( 'source' => 'subscription_handler' ) );
-			return;
-		}
+        if ( is_wp_error( $post_id ) ) {
+            SkyHSHOSO_Logger::error( 'WP site post creation failed for subscription #' . $subscription->get_id() . ': ' . $post_id->get_error_message(), array( 'source' => 'subscription_handler' ) );
+            return;
+        }
 
-		$product_id = $parent_id ? $parent_id : $product->get_id();
+        $product_id = $parent_id ? $parent_id : $product->get_id();
         $server_id  = get_post_meta( $product_id, '_skyhshoso_server_id', true );
         $wp_host_user = get_post_meta( $product_id, '_skyhshoso_wp_host_user', true );
         $wp_storage   = get_post_meta( $product_id, '_skyhshoso_wp_storage', true ) ?: 500;
@@ -482,37 +508,37 @@ class SkyHSHOSO_Subscription_Handler {
             $whm_token = get_post_meta($server_id, '_skyhshoso_whm_token', true);
             $whm_host = get_post_meta($server_id, '_skyhshoso_whm_host', true);
 
-			if ($whm_username && $whm_token && $whm_host) {
-				$whm_api = new SkyHSHOSO_WHM_API($whm_username, $whm_token, $whm_host);
+            if ($whm_username && $whm_token && $whm_host) {
+                $whm_api = new SkyHSHOSO_WHM_API($whm_username, $whm_token, $whm_host);
 
-				if ($new_status === 'on-hold' && $old_status === 'active') {
-					$result = $whm_api->suspend_account($hosting_username);
-					if ($result) {
-						SkyHSHOSO_Logger::info( 'Hosting account ' . $hosting_username . ' suspended via WHM (subscription status change to on-hold)', array( 'source' => 'subscription_handler' ) );
-					} else {
-						SkyHSHOSO_Logger::error( 'Failed to suspend hosting account ' . $hosting_username . ' via WHM', array( 'source' => 'subscription_handler' ) );
-					}
-				} elseif ($new_status === 'active' && ($old_status === 'on-hold' || $old_status === 'expired' || $old_status === 'cancelled')) {
-					$result = $whm_api->reactivate_account($hosting_username);
-					if ($result) {
-						SkyHSHOSO_Logger::info( 'Hosting account ' . $hosting_username . ' reactivated via WHM (subscription status change to active)', array( 'source' => 'subscription_handler' ) );
-					} else {
-						SkyHSHOSO_Logger::error( 'Failed to reactivate hosting account ' . $hosting_username . ' via WHM', array( 'source' => 'subscription_handler' ) );
-					}
-				} elseif ($new_status === 'expired' || $new_status === 'cancelled') {
-					$is_terminated = get_post_meta($hosting_post->ID, 'skyhshoso_hosting_terminated', true);
-					if ($is_terminated !== 'yes') {
-						$result = $whm_api->suspend_account($hosting_username);
-						if ($result) {
-							SkyHSHOSO_Logger::info( 'Hosting account ' . $hosting_username . ' suspended via WHM (subscription ' . $new_status . ')', array( 'source' => 'subscription_handler' ) );
-						} else {
-							SkyHSHOSO_Logger::error( 'Failed to suspend hosting account ' . $hosting_username . ' via WHM on ' . $new_status, array( 'source' => 'subscription_handler' ) );
-						}
-					}
-				}
-			} else {
-				SkyHSHOSO_Logger::warning( 'WHM credentials missing for server ID ' . $server_id . ' — cannot update hosting account for subscription status change', array( 'source' => 'subscription_handler' ) );
-			}
+                if ($new_status === 'on-hold' && $old_status === 'active') {
+                    $result = $whm_api->suspend_account($hosting_username);
+                    if ($result) {
+                        SkyHSHOSO_Logger::info( 'Hosting account ' . $hosting_username . ' suspended via WHM (subscription status change to on-hold)', array( 'source' => 'subscription_handler' ) );
+                    } else {
+                        SkyHSHOSO_Logger::error( 'Failed to suspend hosting account ' . $hosting_username . ' via WHM', array( 'source' => 'subscription_handler' ) );
+                    }
+                } elseif ($new_status === 'active' && ($old_status === 'on-hold' || $old_status === 'expired' || $old_status === 'cancelled')) {
+                    $result = $whm_api->reactivate_account($hosting_username);
+                    if ($result) {
+                        SkyHSHOSO_Logger::info( 'Hosting account ' . $hosting_username . ' reactivated via WHM (subscription status change to active)', array( 'source' => 'subscription_handler' ) );
+                    } else {
+                        SkyHSHOSO_Logger::error( 'Failed to reactivate hosting account ' . $hosting_username . ' via WHM', array( 'source' => 'subscription_handler' ) );
+                    }
+                } elseif ($new_status === 'expired' || $new_status === 'cancelled') {
+                    $is_terminated = get_post_meta($hosting_post->ID, 'skyhshoso_hosting_terminated', true);
+                    if ($is_terminated !== 'yes') {
+                        $result = $whm_api->suspend_account($hosting_username);
+                        if ($result) {
+                            SkyHSHOSO_Logger::info( 'Hosting account ' . $hosting_username . ' suspended via WHM (subscription ' . $new_status . ')', array( 'source' => 'subscription_handler' ) );
+                        } else {
+                            SkyHSHOSO_Logger::error( 'Failed to suspend hosting account ' . $hosting_username . ' via WHM on ' . $new_status, array( 'source' => 'subscription_handler' ) );
+                        }
+                    }
+                }
+            } else {
+                SkyHSHOSO_Logger::warning( 'WHM credentials missing for server ID ' . $server_id . ' — cannot update hosting account for subscription status change', array( 'source' => 'subscription_handler' ) );
+            }
             
         }
         $this->update_wp_site_posts_status($subscription_id, $new_status, $old_status);
@@ -568,13 +594,13 @@ class SkyHSHOSO_Subscription_Handler {
             require_once SKYHSHOSO_PLUGIN_DIR . 'includes/class-skyhshoso-wordpress-manager.php';
             $manager = new SkyHSHOSO_WordPress_Manager( $whm_user, $whm_token, $whm_host, $cpanel_user );
 
-			if ( $new_status === 'on-hold' && $old_status === 'active' ) {
-				$result = $manager->suspend_wp_site( $doc_root );
-			} elseif ( $new_status === 'active' && ( $old_status === 'on-hold' || $old_status === 'expired' || $old_status === 'cancelled' ) ) {
-				$result = $manager->unsuspend_wp_site( $doc_root );
-			} elseif ( $new_status === 'expired' || $new_status === 'cancelled' ) {
-				$result = $manager->suspend_wp_site( $doc_root );
-			}
+            if ( $new_status === 'on-hold' && $old_status === 'active' ) {
+                $result = $manager->suspend_wp_site( $doc_root );
+            } elseif ( $new_status === 'active' && ( $old_status === 'on-hold' || $old_status === 'expired' || $old_status === 'cancelled' ) ) {
+                $result = $manager->unsuspend_wp_site( $doc_root );
+            } elseif ( $new_status === 'expired' || $new_status === 'cancelled' ) {
+                $result = $manager->suspend_wp_site( $doc_root );
+            }
         }
     }
 
@@ -611,14 +637,14 @@ class SkyHSHOSO_Subscription_Handler {
             } else {
                 throw new Exception("Domain renewal failed. No specific error returned.");
             }
-		} catch (Exception $e) {
-			$error_message = $e->getMessage();
-			SkyHSHOSO_Logger::error( 'Domain renewal failed for ' . $domain . ' (subscription #' . $subscription_id . '): ' . $error_message, array( 'source' => 'subscription_handler' ) );
-			return array(
-				'success' => false,
-				'message' => $error_message
-			);
-		}
+        } catch (Exception $e) {
+            $error_message = $e->getMessage();
+            SkyHSHOSO_Logger::error( 'Domain renewal failed for ' . $domain . ' (subscription #' . $subscription_id . '): ' . $error_message, array( 'source' => 'subscription_handler' ) );
+            return array(
+                'success' => false,
+                'message' => $error_message
+            );
+        }
     }
 
     private function update_domain_post_after_renewal($subscription_id, $success, $error_message = '') {

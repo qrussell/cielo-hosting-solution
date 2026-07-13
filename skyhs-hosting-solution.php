@@ -146,6 +146,20 @@ final class SkyHSHOSO {
         // Subscription system (must load before anything that calls skyhshoso_*)
         // -----------------------------------------------------------------
         require_once SKYHSHOSO_PLUGIN_DIR . 'includes/class-skyhshoso-subscription-db.php';
+		// Load the PayPal Cart Manager
+		require_once plugin_dir_path( __FILE__ ) . 'includes/class-cielo-paypal-cart-manager.php';
+
+		// Initialize the class, but only if WooCommerce is active
+		add_action( 'plugins_loaded', 'cielo_init_paypal_cart_manager' );
+		function cielo_init_paypal_cart_manager() {
+			if ( class_exists( 'WooCommerce' ) ) {
+				new Cielo_PayPal_Cart_Manager();
+			}
+		}
+		// Load Provider Abstraction Classes
+		require_once plugin_dir_path( __FILE__ ) . 'includes/class-hosting-provider-interface.php';
+		require_once plugin_dir_path( __FILE__ ) . 'includes/class-hosting-provider-factory.php';
+		require_once plugin_dir_path( __FILE__ ) . 'includes/drivers/class-whm-driver.php';
 
         // Auto-create the DB table if it's missing (e.g. plugin was already active when the table was added).
         SkyHSHOSO_Subscription_DB::maybe_install();
@@ -243,6 +257,15 @@ final class SkyHSHOSO {
             return $supports;
         }, 10, 3 );
 
+		// Add the custom hosting product type to the WooCommerce dropdown
+		add_filter( 'product_type_selector', 'cielo_register_hosting_product_type' );
+
+		function cielo_register_hosting_product_type( $types ) {
+			// Adds 'skyhshoso' as the internal slug, and 'Website Hosting' as the visible label
+			$types['skyhshoso'] = __( 'Website Hosting', 'cielo-hosting' );
+			
+			return $types;
+		}
         // -----------------------------------------------------------------
         // Subscription switching (upgrade/downgrade)
         // -----------------------------------------------------------------

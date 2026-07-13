@@ -678,6 +678,63 @@ function skyhshoso_generate_wp_sso() {
         wp_send_json_error(['message' => 'Could not establish secure remote token injection.']);
     }
 }
+/**
+ * =========================================================================
+ * Find External Wordpress Sites in the cPanel
+ * =========================================================================
+ */
+add_action('wp_ajax_skyhshoso_scan_external_wp', 'skyhshoso_scan_external_wp_callback');
+function skyhshoso_scan_external_wp_callback() {
+    $hosting_id = absint($_POST['hosting_id']);
+    $is_external = get_post_meta($hosting_id, '_is_external_cpanel', true);
+
+    if (!$is_external) wp_send_json_error(['message' => 'Not an external account.']);
+
+    // Fetch Credentials
+    $domain = get_post_meta($hosting_id, '_external_cpanel_domain', true);
+    $user   = get_post_meta($hosting_id, '_external_cpanel_username', true);
+    $token  = get_post_meta($hosting_id, '_external_cpanel_api_token', true);
+
+    // Vetted Crawler Logic: We list files in public_html and common subdirectories
+    // This uses cPanel's native Fileman UAPI, which is highly reliable.
+    $paths_to_scan = ['public_html', 'public_html/wp', 'public_html/wordpress'];
+    $discovered_sites = [];
+
+    foreach ($paths_to_scan as $dir) {
+        $url = "https://{$domain}:2083/execute/Fileman/list_files?dir=/home/{$user}/{$dir}&show_hidden=1";
+        
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ["Authorization: cpanel {$user}:{$token}"]);
+        
+        $res = json_decode(curl_exec($ch), true);
+        curl_close($ch);
+
+        if (isset($res['data'])) {
+            foreach ($res['data'] as $file) {
+                // If we find wp-config.php, we've found a WP installation
+                if ($file['file'] === 'wp-config.php') {
+                    
+                    // Build the URL and trim any trailing slashes
+                    $raw_url = 'https://' . $domain . '/' . ($dir === 'public_html' ? '' : str_replace('public_html/', '', $dir));
+                    $clean_url = rtrim($raw_url, '/');
+
+                    $discovered_sites[] = [
+                        'path' => $dir,
+                        'url'  => $clean_url
+                    ];
+                }
+            }
+        }
+    }
+
+    if (!empty($discovered_sites)) {
+        wp_send_json_success(['sites' => $discovered_sites]);
+    } else {
+        wp_send_json_error(['message' => 'No WordPress installations found.']);
+    }
+}
 
 /**
  * =========================================================================
@@ -851,6 +908,20 @@ function skyhshoso_assign_custom_domain() {
  */
 add_action('wp_ajax_skyhshoso_get_cpanel_stats_callback', 'skyhshoso_get_cpanel_stats_callback');
 function skyhshoso_get_cpanel_stats_callback() {
+    // 1. Get the hosting ID
+    $hosting_id = absint($_POST['hosting_id']);
+    
+    // 2. Fetch the specific server assigned to this hosting post
+    $server_id = get_post_meta($hosting_id, 'skyhshoso_server_id', true);
+    
+    // 3. Get credentials for THAT specific server
+    $whm_token = get_post_meta($server_id, '_skyhshoso_whm_token', true);
+    $whm_host  = get_post_meta($server_id, '_skyhshoso_whm_host', true);
+    $username  = get_post_meta($hosting_id, 'skyhshoso_hosting_username', true);
+
+    if (empty($whm_token) || empty($whm_host)) {
+        wp_send_json_error(['message' => 'Credentials not found for this server.']);
+    }
     if (!isset($_POST['nonce']) || !wp_verify_nonce(sanitize_key($_POST['nonce']), 'skyhshoso_dashboard_nonce')) {
         wp_send_json_error(['message' => 'Invalid security token.']);
     }
@@ -1018,118 +1089,148 @@ function skyhshoso_reset_cpanel_pass_callback() {
 }
 
 
-/**
- * =========================================================================
- * TWO-WAY WHM ACCOUNT MANAGEMENT (ADMIN PANEL SYNC, SUSPEND, TERMINATE)
- * =========================================================================
- */
 add_action('wp_ajax_skyhshoso_sync_account', 'skyhshoso_sync_account_callback');
 function skyhshoso_sync_account_callback() {
-    if (!current_user_can('manage_options')) {
+    $hosting_id = absint($_POST['hosting_id']);
+    
+    // Strict Tenant View
+    $current_user_id = get_current_user_id();
+    $post_author_id = absint(get_post_field('post_author', $hosting_id));
+    $invited_by = get_user_meta($current_user_id, 'skyhshoso_invited_by', true) ?: [];
+    
+    if ($current_user_id !== $post_author_id && !in_array($post_author_id, $invited_by) && !current_user_can('manage_options')) {
         wp_send_json_error(['message' => 'Permission denied.']);
     }
 
-    $hosting_id = absint($_POST['hosting_id']);
     $server_id = get_post_meta($hosting_id, 'skyhshoso_server_id', true);
     $username  = get_post_meta($hosting_id, 'skyhshoso_hosting_username', true);
 
-    $whm_api_token = get_post_meta($server_id, '_skyhshoso_whm_token', true);
-    $whm_api_host  = get_post_meta($server_id, '_skyhshoso_whm_host', true);
-    $whm_host_domain = preg_replace('/:\d+$/', '', parse_url($whm_api_host, PHP_URL_HOST) ?: $whm_api_host);
+    // 1. Initialize the Factory Driver
+    $driver = SkyHSHOSO_Provider_Factory::get_driver($server_id);
+    if (is_wp_error($driver)) { wp_send_json_error(['message' => $driver->get_error_message()]); }
 
-    $url = "https://{$whm_host_domain}:2087/json-api/accountsummary?api.version=1&user={$username}";
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // Bypass self-signed SSL blocks
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Authorization: whm root:' . $whm_api_token]);
-    $res = json_decode(curl_exec($ch), true);
-    curl_close($ch);
+    // 2. Ask the Driver for the Account Summary
+    $summary = $driver->get_account_summary($username);
 
-    if (isset($res['metadata']['result']) && $res['metadata']['result'] == 1) {
-        $acct = $res['data']['acct'][0];
-        
-        $status = $acct['suspended'] ? 'suspended' : 'active';
-        update_post_meta($hosting_id, 'skyhshoso_account_status', $status);
-        
-        SkyHSHOSO_WHM_API::clear_stats_cache($hosting_id); 
-        wp_send_json_success(['message' => 'Account successfully synced with WHM.', 'status' => $status]);
-    } else {
-        wp_send_json_error(['message' => 'Could not locate account on server. It may have been deleted.']);
+    if (is_wp_error($summary)) {
+        wp_send_json_error(['message' => 'Server Error: ' . $summary->get_error_message()]);
     }
+
+    // 3. Update the local database based on the server's truth
+    // Note: cPanel returns 1 if suspended, 0 if not. HestiaCP might return 'yes' or 'no'. 
+    // We'll trust if 'suspended' is truthy for now.
+    $status = !empty($summary['suspended']) ? 'suspended' : 'active';
+    update_post_meta($hosting_id, 'skyhshoso_account_status', $status);
+    
+    // Clear old stats cache if it exists
+    if (class_exists('SkyHSHOSO_WHM_API')) {
+        SkyHSHOSO_WHM_API::clear_stats_cache($hosting_id); 
+    }
+    
+    wp_send_json_success(['message' => 'Account successfully synced with Server!', 'status' => $status]);
 }
+
+// Map the frontend sync action to use this exact same function!
+add_action('wp_ajax_skyhshoso_frontend_sync', 'skyhshoso_sync_account_callback');
 
 add_action('wp_ajax_skyhshoso_toggle_suspend', 'skyhshoso_toggle_suspend_callback');
 function skyhshoso_toggle_suspend_callback() {
+    // 1. Security Check
     if (!current_user_can('manage_options')) {
         wp_send_json_error(['message' => 'Permission denied. Only administrators can suspend accounts.']);
     }
-    
-    $hosting_id = absint($_POST['hosting_id']);
-    $action = sanitize_text_field($_POST['status_action']); 
-    $api_action = $action === 'suspend' ? 'suspendacct' : 'unsuspendacct';
 
+    $hosting_id = absint($_POST['hosting_id']);
+    $action = sanitize_text_field($_POST['status_action']); // 'suspend' or 'unsuspend'
+
+    // 2. Get Data
     $server_id = get_post_meta($hosting_id, 'skyhshoso_server_id', true);
     $username  = get_post_meta($hosting_id, 'skyhshoso_hosting_username', true);
-    $whm_api_token = get_post_meta($server_id, '_skyhshoso_whm_token', true);
-    $whm_api_host  = get_post_meta($server_id, '_skyhshoso_whm_host', true);
-    $whm_host_domain = preg_replace('/:\d+$/', '', parse_url($whm_api_host, PHP_URL_HOST) ?: $whm_api_host);
 
-    $url = "https://{$whm_host_domain}:2087/json-api/{$api_action}?api.version=1&user={$username}&reason=" . urlencode('Suspended by admin via WP Admin Dashboard.');
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); 
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Authorization: whm root:' . $whm_api_token]);
-    $res = json_decode(curl_exec($ch), true);
-    curl_close($ch);
-
-    if (isset($res['metadata']['result']) && $res['metadata']['result'] == 1) {
-        $new_status = $action === 'suspend' ? 'suspended' : 'active';
-        update_post_meta($hosting_id, 'skyhshoso_account_status', $new_status);
-        wp_send_json_success(['message' => 'Account status updated successfully.', 'new_status' => $new_status]);
-    } else {
-        wp_send_json_error(['message' => 'WHM Error: ' . ($res['metadata']['reason'] ?? 'Unknown API error')]);
+    // 3. INITIALIZE THE FACTORY DRIVER
+    $driver = SkyHSHOSO_Provider_Factory::get_driver($server_id);
+    
+    // Check if the factory failed (e.g., missing credentials or driver not built yet)
+    if (is_wp_error($driver)) {
+        wp_send_json_error(['message' => $driver->get_error_message()]);
     }
+
+    // 4. Execute the command (Notice how clean this is!)
+    if ($action === 'suspend') {
+        $result = $driver->suspend_account($username, 'Suspended by admin via WP Admin Dashboard.');
+    } else {
+        $result = $driver->unsuspend_account($username);
+    }
+
+    // 5. Handle the response
+    if (is_wp_error($result)) {
+        wp_send_json_error(['message' => 'Server Error: ' . $result->get_error_message()]);
+    }
+
+    // Success! Update local database status.
+    $new_status = ($action === 'suspend') ? 'suspended' : 'active';
+    update_post_meta($hosting_id, 'skyhshoso_account_status', $new_status);
+    
+    wp_send_json_success([
+        'message' => 'Account status updated successfully.', 
+        'new_status' => $new_status
+    ]);
 }
 
 add_action('wp_ajax_skyhshoso_terminate_account', 'skyhshoso_terminate_account_callback');
 function skyhshoso_terminate_account_callback() {
-    if (!current_user_can('manage_options')) {
-        wp_send_json_error(['message' => 'Permission denied. Only administrators can terminate accounts.']);
-    }
-    
     $hosting_id = absint($_POST['hosting_id']);
-    
+    $hosting_post = get_post($hosting_id);
+
+    // Strict Security Check: Admin or Owner
+    $current_user_id = get_current_user_id();
+    $is_admin = current_user_can('manage_options');
+    $is_owner = ($hosting_post && $hosting_post->post_author == $current_user_id);
+
+    if (!$is_admin && !$is_owner) {
+        wp_send_json_error(['message' => 'Permission denied.']);
+    }
+
+    // --- ADD THIS BLOCK FOR EXTERNAL ACCOUNTS ---
+    $is_external = get_post_meta($hosting_id, '_is_external_cpanel', true);
+    if ($is_external) {
+        wp_trash_post($hosting_id);
+        wp_send_json_success(['message' => 'Server connection successfully removed.']);
+        return;
+    }
+    // --------------------------------------------
+
     $server_id = get_post_meta($hosting_id, 'skyhshoso_server_id', true);
     $username  = get_post_meta($hosting_id, 'skyhshoso_hosting_username', true);
-    $whm_api_token = get_post_meta($server_id, '_skyhshoso_whm_token', true);
-    $whm_api_host  = get_post_meta($server_id, '_skyhshoso_whm_host', true);
-    $whm_host_domain = preg_replace('/:\d+$/', '', parse_url($whm_api_host, PHP_URL_HOST) ?: $whm_api_host);
-
-    $url = "https://{$whm_host_domain}:2087/json-api/removeacct?api.version=1&user={$username}";
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); 
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Authorization: whm root:' . $whm_api_token]);
-    $res = json_decode(curl_exec($ch), true);
-    curl_close($ch);
     
-    if (isset($res['metadata']['result']) && $res['metadata']['result'] == 1) {
-        $sub_id = get_post_meta($hosting_id, 'skyhshoso_subscription_id', true);
-        if ($sub_id && function_exists('wcs_get_subscription')) {
-            $subscription = wcs_get_subscription($sub_id);
-            if ($subscription && $subscription->can_be_updated_to('cancelled')) {
-                $subscription->update_status('cancelled', 'Account permanently terminated by Admin.');
-            }
-        }
-        wp_trash_post($hosting_id);
-        wp_send_json_success(['message' => 'Account securely terminated and billing cancelled.']);
-    } else {
-        wp_send_json_error(['message' => 'WHM Error: ' . ($res['metadata']['reason'] ?? 'Could not terminate server account.')]);
+    // 1. Initialize the Factory Driver
+    $driver = SkyHSHOSO_Provider_Factory::get_driver($server_id);
+    if (is_wp_error($driver)) { wp_send_json_error(['message' => $driver->get_error_message()]); }
+
+    // 2. Terminate the Account via the Driver
+    $result = $driver->terminate_account($username);
+    
+    if (is_wp_error($result)) {
+        wp_send_json_error(['message' => 'Server Error: ' . $result->get_error_message()]);
     }
+
+    // 3. Cancel WooCommerce subscription if it exists
+    $sub_id = get_post_meta($hosting_id, 'skyhshoso_subscription_id', true);
+    if ($sub_id && function_exists('wcs_get_subscription')) {
+        $subscription = wcs_get_subscription($sub_id);
+        if ($subscription && $subscription->can_be_updated_to('cancelled')) {
+            $cancelled_by = $is_admin ? 'Admin' : 'Client';
+            $subscription->update_status('cancelled', "Account permanently terminated by $cancelled_by via API.");
+        }
+    }
+    
+    // Trash the WP post record
+    wp_trash_post($hosting_id);
+    wp_send_json_success(['message' => 'Account securely terminated and billing cancelled.']);
 }
+
+// Map the frontend action to use the exact same secure function!
+add_action('wp_ajax_skyhshoso_frontend_terminate', 'skyhshoso_terminate_account_callback');
 
 add_action('wp_ajax_skyhshoso_sync_wpt_sets', 'skyhshoso_sync_wpt_sets_callback');
 function skyhshoso_sync_wpt_sets_callback() {
@@ -1170,56 +1271,6 @@ function skyhshoso_sync_wpt_sets_callback() {
     }
 }
 
-/**
- * =========================================================================
- * SAFE FRONTEND MANAGEMENT ACTIONS (SYNC, SUSPEND, DELETE)
- * =========================================================================
- */
-add_action('wp_ajax_skyhshoso_frontend_sync', 'skyhshoso_frontend_sync_callback');
-function skyhshoso_frontend_sync_callback() {
-    $hosting_id = intval($_POST['hosting_id']);
-    
-    // STRICT TENANT VIEW
-    $current_user_id = get_current_user_id();
-    $post_author_id = absint(get_post_field('post_author', $hosting_id));
-    $invited_by = get_user_meta($current_user_id, 'skyhshoso_invited_by', true) ?: [];
-    
-    if ($current_user_id !== $post_author_id && !in_array($post_author_id, $invited_by)) {
-        wp_send_json_error(['message' => 'Permission denied.']);
-    }
-    
-    $server_id  = get_post_meta($hosting_id, 'skyhshoso_server_id', true);
-    $username   = get_post_meta($hosting_id, 'skyhshoso_hosting_username', true);
-
-    if (!$server_id || !$username) wp_send_json_error(['message' => 'No cPanel username found. The automated creation likely failed.']);
-
-    $whm_api_token = get_post_meta($server_id, '_skyhshoso_whm_token', true);
-    $whm_api_host  = get_post_meta($server_id, '_skyhshoso_whm_host', true);
-    $whm_host_domain = preg_replace('/:\d+$/', '', parse_url($whm_api_host, PHP_URL_HOST) ?: $whm_api_host);
-
-    $url = "https://{$whm_host_domain}:2087/json-api/accountsummary?api.version=1&user={$username}";
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Authorization: whm root:' . $whm_api_token]);
-    $res_raw = curl_exec($ch);
-    $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    $res = json_decode($res_raw, true);
-
-    if ($status !== 200 || !isset($res['metadata']['result']) || $res['metadata']['result'] != 1) {
-        $reason = isset($res['metadata']['reason']) ? $res['metadata']['reason'] : 'Unknown WHM Error';
-        wp_send_json_error(['message' => "WHM Error: {$reason}. (If it says the account doesn't exist, check your WooCommerce logs—the initial provision failed)."]);
-    }
-
-    $suspended = isset($res['data']['acct'][0]['suspended']) && $res['data']['acct'][0]['suspended'] == 1;
-    update_post_meta($hosting_id, 'skyhshoso_account_status', $suspended ? 'suspended' : 'active');
-    
-    wp_send_json_success(['message' => 'Account status synced perfectly from WHM!']);
-}
-
 add_action('wp_ajax_skyhshoso_frontend_toggle_status', 'skyhshoso_frontend_toggle_status_callback');
 function skyhshoso_frontend_toggle_status_callback() {
     if (!current_user_can('manage_options')) {
@@ -1256,39 +1307,75 @@ function skyhshoso_frontend_toggle_status_callback() {
     }
 }
 
-add_action('wp_ajax_skyhshoso_frontend_terminate', 'skyhshoso_frontend_terminate_callback');
-function skyhshoso_frontend_terminate_callback() {
-    if (!current_user_can('manage_options')) {
-        wp_send_json_error(['message' => 'You do not have permission to terminate accounts.']);
-    }
-
+/**
+ * =========================================================================
+ * ADD EXTERNAL CPANEL (BYOH)
+ * =========================================================================
+ */
+add_action('wp_ajax_skyhshoso_add_external_cpanel', 'skyhshoso_add_external_cpanel_callback');
+function skyhshoso_add_external_cpanel_callback() {
+    // 1. Security Check
     if (!isset($_POST['nonce']) || !wp_verify_nonce(sanitize_key($_POST['nonce']), 'skyhshoso_dashboard_nonce')) {
         wp_send_json_error(['message' => 'Invalid security token.']);
     }
 
-    $hosting_id = intval($_POST['hosting_id']);
-    
-    $server_id  = get_post_meta($hosting_id, 'skyhshoso_server_id', true);
-    $username   = get_post_meta($hosting_id, 'skyhshoso_hosting_username', true);
-    $whm_api_token = get_post_meta($server_id, '_skyhshoso_whm_token', true);
-    $whm_api_host  = get_post_meta($server_id, '_skyhshoso_whm_host', true);
-    $whm_host_domain = preg_replace('/:\d+$/', '', parse_url($whm_api_host, PHP_URL_HOST) ?: $whm_api_host);
+    $current_user_id = get_current_user_id();
+    if (!$current_user_id) {
+        wp_send_json_error(['message' => 'You must be logged in.']);
+    }
 
-    $url = "https://{$whm_host_domain}:2087/json-api/removeacct?api.version=1&user={$username}";
+    // 2. Sanitize Inputs
+    $domain = sanitize_text_field($_POST['cpanel_domain']);
+    $username = sanitize_text_field($_POST['cpanel_username']);
+    $api_token = sanitize_text_field($_POST['cpanel_api_token']);
+
+    if (empty($domain) || empty($username) || empty($api_token)) {
+        wp_send_json_error(['message' => 'All fields are required.']);
+    }
+
+    // Clean up the domain input (remove http:// and trailing slashes)
+    $domain = preg_replace('#^https?://#', '', $domain);
+    $domain = rtrim($domain, '/');
+
+    // 3. Test Connection (Try to fetch domains using cPanel UAPI)
+    $url = "https://{$domain}:2083/execute/DomainInfo/domains_data";
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Authorization: whm root:' . $whm_api_token]);
-    $res = json_decode(curl_exec($ch), true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); 
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ["Authorization: cpanel {$username}:{$api_token}"]);
+    $res_raw = curl_exec($ch);
+    $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
-    if (isset($res['metadata']['result']) && $res['metadata']['result'] == 1) {
-        wp_delete_post($hosting_id, true); // Delete the local WordPress record
-        wp_send_json_success(['message' => 'Server permanently destroyed.']);
-    } else {
-        wp_send_json_error(['message' => 'Failed to terminate: ' . (isset($res['metadata']['reason']) ? $res['metadata']['reason'] : 'Unknown error')]);
+    $res = json_decode($res_raw, true);
+
+    // If the server rejects us, block the save and tell the user!
+    if ($status !== 200 || !isset($res['status']) || $res['status'] != 1) {
+        wp_send_json_error(['message' => 'Connection failed. Please check your Domain, Username, and API Token.']);
     }
+
+    // 4. Create the Custom Post Type Record
+    $post_data = [
+        'post_title'   => "External cPanel: " . $domain,
+        'post_status'  => 'publish',
+        'post_type'    => 'skyhshoso_hosting',
+        'post_author'  => $current_user_id, // Assign ownership to this user
+    ];
+    $hosting_id = wp_insert_post($post_data);
+
+    if (is_wp_error($hosting_id)) {
+        wp_send_json_error(['message' => 'Failed to save hosting record to database.']);
+    }
+
+    // 5. Save Meta Data (Flagging it as external)
+    update_post_meta($hosting_id, '_is_external_cpanel', '1');
+    update_post_meta($hosting_id, '_external_cpanel_domain', $domain);
+    update_post_meta($hosting_id, '_external_cpanel_username', $username);
+    update_post_meta($hosting_id, '_external_cpanel_api_token', $api_token);
+    update_post_meta($hosting_id, 'skyhshoso_account_status', 'active'); 
+
+    wp_send_json_success(['message' => 'cPanel account successfully linked!']);
 }
 
 /**
@@ -1318,4 +1405,51 @@ function skyhshoso_cleanup_wp_sites_on_hosting_delete($post_id) {
             }
         }
     }
+}
+/**
+ * =========================================================================
+ * EXTERNAL CPANEL Check for valid Credentials
+ * =========================================================================
+ */
+add_action('wp_ajax_skyhshoso_update_external_cpanel', 'skyhshoso_update_external_cpanel_callback');
+function skyhshoso_update_external_cpanel_callback() {
+    if (!isset($_POST['nonce']) || !wp_verify_nonce(sanitize_key($_POST['nonce']), 'skyhshoso_dashboard_nonce')) {
+        wp_send_json_error(['message' => 'Invalid security token.']);
+    }
+
+    $hosting_id = intval($_POST['hosting_id']);
+    
+    // Ownership Check
+    $hosting_post = get_post($hosting_id);
+    $current_user_id = get_current_user_id();
+    if ($hosting_post->post_author != $current_user_id && !current_user_can('administrator')) {
+        wp_send_json_error(['message' => 'Permission denied.']);
+    }
+
+    $domain = sanitize_text_field($_POST['cpanel_domain']);
+    $username = sanitize_text_field($_POST['cpanel_username']);
+    $api_token = sanitize_text_field($_POST['cpanel_api_token']);
+
+    // Test Connection before saving
+    $url = "https://{$domain}:2083/execute/DomainInfo/domains_data";
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); 
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ["Authorization: cpanel {$username}:{$api_token}"]);
+    $res_raw = curl_exec($ch);
+    $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    $res = json_decode($res_raw, true);
+    if ($status !== 200 || !isset($res['status']) || $res['status'] != 1) {
+        wp_send_json_error(['message' => 'Connection failed. Please check your credentials.']);
+    }
+
+    // Save Updated Meta
+    update_post_meta($hosting_id, '_external_cpanel_domain', $domain);
+    update_post_meta($hosting_id, '_external_cpanel_username', $username);
+    update_post_meta($hosting_id, '_external_cpanel_api_token', $api_token);
+
+    wp_send_json_success(['message' => 'Credentials updated successfully.']);
 }

@@ -22,6 +22,7 @@ class SkyHSHOSO_Product_Manager {
     }
 
     public function __construct() {
+        // ADD THIS LINE: This hooks the function to make the menu visible!
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
 
         // AJAX: create product

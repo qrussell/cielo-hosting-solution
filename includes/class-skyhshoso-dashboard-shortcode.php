@@ -659,6 +659,9 @@ class SkyHSHOSO_Dashboard_Shortcode {
     /**
      * Render the hosting tab content
      */
+    /**
+     * Render the hosting tab content
+     */
     public static function render_hosting_tab() {
         // Get current user ID
         $current_user_id = get_current_user_id();
@@ -693,10 +696,40 @@ class SkyHSHOSO_Dashboard_Shortcode {
         $search_term = isset($_GET['search']) ? sanitize_text_field(wp_unslash($_GET['search'])) : '';
         
         ?>
-        <div class="skyhshoso-hosting-header" style="justify-content: flex-end; margin-bottom: 0;">
+        <div class="skyhshoso-hosting-header" style="display:flex; justify-content: flex-end; gap: 10px; margin-bottom: 0;">
+            
+            <button type="button" class="skyhshoso-new-hosting-btn" style="background-color: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; cursor: pointer;" onclick="jQuery('#skyhshoso-external-cpanel-form-container').slideToggle();">
+                <span class="truncate"><?php esc_html_e('Connect Existing cPanel', 'skyhs-hosting-solution'); ?></span>
+            </button>
+
             <a href="<?php echo esc_url( add_query_arg( array( 'tab' => 'skyhshoso_hosting', 'new_hosting' => 1 ), self::get_base_url() ) ); ?>" class="skyhshoso-new-hosting-btn">
                 <span class="truncate"><?php esc_html_e('New Hosting', 'skyhs-hosting-solution'); ?></span>
             </a>
+        </div>
+        
+        <div id="skyhshoso-external-cpanel-form-container" style="display: none; background: #ffffff; padding: 20px; border-radius: 8px; margin-top: 15px; margin-bottom: 20px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+            <h3 style="margin-top: 0;">Connect External cPanel</h3>
+            <p style="color: #64748b;">Bring your own hosting! Generate a "cPanel API Token" from your server's security settings and paste it below.</p>
+            
+            <form id="skyhs-add-external-form">
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; font-weight: 600; margin-bottom: 5px;">Primary Domain (e.g., example.com)</label>
+                    <input type="text" id="ext_cpanel_domain" required style="width: 100%; max-width: 400px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 4px;">
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; font-weight: 600; margin-bottom: 5px;">cPanel Username</label>
+                    <input type="text" id="ext_cpanel_username" required style="width: 100%; max-width: 400px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 4px;">
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; font-weight: 600; margin-bottom: 5px;">cPanel API Token</label>
+                    <input type="password" id="ext_cpanel_token" required style="width: 100%; max-width: 400px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 4px;">
+                </div>
+
+                <button type="submit" id="ext_cpanel_submit_btn" class="skyhshoso-new-hosting-btn" style="cursor: pointer; border: none;">Test Connection & Link</button>
+                <div id="ext_cpanel_message" style="margin-top: 15px; font-weight: 600;"></div>
+            </form>
         </div>
         
         <div class="skyhshoso-search-container">
@@ -738,7 +771,6 @@ class SkyHSHOSO_Dashboard_Shortcode {
                     $args['s'] = $search_term;
                 }
 
-                // Remove Admin God Mode - Force exact user match for everyone on the frontend
                 $invited_by = get_user_meta( $current_user_id, 'skyhshoso_invited_by', true );
                 $invited_by = is_array( $invited_by ) ? $invited_by : array();
 
@@ -769,11 +801,16 @@ class SkyHSHOSO_Dashboard_Shortcode {
                                 $hosting_id       = get_the_ID();
                                 $hosting_domain   = get_post_meta( $hosting_id, 'skyhshoso_hosting_domain', true );
                                 $subscription_id  = get_post_meta( $hosting_id, 'skyhshoso_subscription_id', true );
+                                $is_external      = get_post_meta( $hosting_id, '_is_external_cpanel', true );
 
                                 $subscription_status = 'inactive';
                                 $status_class        = 'skyhshoso-status-inactive';
 
-                                if ( ! empty( $subscription_id ) ) {
+                                if ( $is_external ) {
+                                    $subscription_status = 'active'; 
+                                    $status_class        = 'skyhshoso-status-active';
+                                } 
+                                elseif ( ! empty( $subscription_id ) ) {
                                     $subscription = skyhshoso_get_subscription( $subscription_id );
                                     if ( $subscription ) {
                                         $subscription_status = $subscription->get_status();
@@ -782,11 +819,15 @@ class SkyHSHOSO_Dashboard_Shortcode {
                                         }
                                     }
                                 }
-                                
-                                $acct_stat = get_post_meta($hosting_id, 'skyhshoso_account_status', true) ?: 'active';
 
+                                $acct_stat = get_post_meta($hosting_id, 'skyhshoso_account_status', true) ?: 'active';
                                 $display_status = str_replace( '-', ' ', $subscription_status );
                                 $display_status = ucwords( $display_status );
+
+                                if ( $is_external ) {
+                                    $display_status = 'Active (External)';
+                                    $hosting_domain = get_post_meta( $hosting_id, '_external_cpanel_domain', true );
+                                }
 
                                 $domain_display = ! empty( $hosting_domain ) ? esc_html( $hosting_domain ) : 'Not set';
                                 ?>
@@ -829,7 +870,6 @@ class SkyHSHOSO_Dashboard_Shortcode {
                     </div>
                     <?php
                 }
-                
                 wp_reset_postdata();
                 ?>
             </div>
@@ -842,7 +882,7 @@ class SkyHSHOSO_Dashboard_Shortcode {
     
     /**
      * Render the GoDaddy-Style Hosting Detail Control Panel
-     * * @param int $hosting_id The hosting ID to display
+     * @param int $hosting_id The hosting ID to display
      */
     public static function render_hosting_detail($hosting_id) {
         $hosting = get_post($hosting_id);
@@ -852,7 +892,6 @@ class SkyHSHOSO_Dashboard_Shortcode {
             return;
         }
         
-        // Permission Check (We leave the admin check here so an admin can troubleshoot via direct URL)
         $current_user_id = get_current_user_id();
         $hosting_author_id = $hosting->post_author;
         $invited_by = get_user_meta($current_user_id, 'skyhshoso_invited_by', true);
@@ -864,18 +903,39 @@ class SkyHSHOSO_Dashboard_Shortcode {
         }
         
         // Get Core Data
-        $hosting_domain = get_post_meta($hosting_id, 'skyhshoso_hosting_domain', true) ?: 'Not configured';
+        $is_external    = get_post_meta($hosting_id, '_is_external_cpanel', true);
+        $internal_domain = get_post_meta($hosting_id, 'skyhshoso_hosting_domain', true);
+        $external_domain = get_post_meta($hosting_id, '_external_cpanel_domain', true);
+
+        if (!empty($internal_domain)) {
+            $hosting_domain = $internal_domain;
+        } elseif (!empty($external_domain)) {
+            $hosting_domain = $external_domain;
+        } else {
+            $hosting_domain = 'Not configured';
+        }
+        
+        if ($is_external) {
+            $whm_user = get_post_meta($hosting_id, '_external_cpanel_username', true);
+            $display_ip = 'Remote Server'; 
+        } else {
+            $whm_user = get_post_meta($hosting_id, 'skyhshoso_hosting_username', true);
+            $server_id = get_post_meta($hosting_id, 'skyhshoso_server_id', true);
+            $display_ip = get_post_meta($hosting_id, '_skyhshoso_server_ip', true) ?: ($server_id ? get_post_meta($server_id, '_skyhshoso_server_ip', true) : 'Pending');
+        }        
+        
         $subscription_id = get_post_meta($hosting_id, 'skyhshoso_subscription_id', true);
-        $whm_user = get_post_meta($hosting_id, 'skyhshoso_hosting_username', true);
-        
-        $server_id   = get_post_meta($hosting_id, 'skyhshoso_server_id', true);
-        $display_ip  = get_post_meta($hosting_id, '_skyhshoso_server_ip', true) ?: ($server_id ? get_post_meta($server_id, '_skyhshoso_server_ip', true) : 'Pending');
-        
+       
         $status_class = 'skyhshoso-status-inactive';
         $display_status = 'Inactive';
         $is_active = false;
-
-        if (!empty($subscription_id)) {
+        
+        if ($is_external) {
+            $is_active = true;
+            $status_class = 'skyhshoso-status-active';
+            $display_status = 'Active (External)';
+        } 
+        elseif (!empty($subscription_id)) {
             $subscription = skyhshoso_get_subscription($subscription_id);
             if ($subscription) {
                 $status = $subscription->get_status();
@@ -911,10 +971,13 @@ class SkyHSHOSO_Dashboard_Shortcode {
                     <button class="skyhshoso-button skyhs-secure-sync-btn" data-hosting-id="<?php echo esc_attr($hosting_id); ?>" style="background:#f1f5f9; color:#475569; padding:6px 12px; border:1px solid #e2e8f0; font-size:12px;" title="<?php esc_attr_e( 'Sync Server Status', 'skyhs-hosting-solution' ); ?>">
                         <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin-right:4px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> <?php esc_html_e('Sync', 'skyhs-hosting-solution'); ?>
                     </button>
-                    <?php if (current_user_can('manage_options')) : // ONLY SHOW TO ADMINS ?>
+                    
+                    <?php if (!$is_external && current_user_can('manage_options')) : // ONLY SHOW TO ADMINS ON INTERNAL SERVERS ?>
                         <button class="skyhshoso-button skyhs-secure-toggle-btn" data-hosting-id="<?php echo esc_attr($hosting_id); ?>" data-action="<?php echo esc_attr($t_act); ?>" style="background:<?php echo $t_col; ?>; color:#fff; padding:6px 12px; font-size:12px; border:none;"><?php echo esc_html($t_lbl); ?></button>
-                        <button class="skyhshoso-button skyhs-secure-terminate-btn" data-hosting-id="<?php echo esc_attr($hosting_id); ?>" style="background:#ef4444; color:#fff; padding:6px 12px; font-size:12px; border:none;"><?php esc_html_e('Delete', 'skyhs-hosting-solution'); ?></button>
                     <?php endif; ?>
+                    
+                    <?php $delete_btn_text = $is_external ? __('Remove', 'skyhs-hosting-solution') : __('Delete', 'skyhs-hosting-solution'); ?>
+                    <button class="skyhshoso-button skyhs-secure-terminate-btn" data-hosting-id="<?php echo esc_attr($hosting_id); ?>" data-is-external="<?php echo $is_external ? '1' : '0'; ?>" style="background:#ef4444; color:#fff; padding:6px 12px; font-size:12px; border:none;"><?php echo esc_html($delete_btn_text); ?></button>
                 </div>
             </div>
         </div>
@@ -940,44 +1003,89 @@ class SkyHSHOSO_Dashboard_Shortcode {
                     <span style="font-size:15px; color:#0f172a; font-weight:500;"><?php echo esc_html($whm_user); ?></span>
                 </div>
 
-                <div id="skyhshoso-disk-usage-container" data-hosting-id="<?php echo esc_attr($hosting_id); ?>">
-                    <span style="display:block; font-size:12px; color:#64748b; font-weight:600; text-transform:uppercase;">Disk Usage</span>
-                    <div style="width:100%; background:#e2e8f0; border-radius:4px; height:8px; margin-top:6px; overflow:hidden;">
-                        <div style="width:30%; background:#94a3b8; height:100%; transition: width 0.5s;" id="skyhs-disk-bar"></div> </div>
-                    <span style="font-size:12px; color:#64748b; margin-top:4px; display:inline-block;" id="skyhs-disk-text">Loading metrics...</span>
-                </div>
-            </div>
-
-            <div class="skyhshoso-detail-card" style="margin:0; padding:24px;">
-                <h3 style="font-size:16px; font-weight:700; margin-bottom:16px; border-bottom:1px solid #f1f5f9; padding-bottom:8px;">Security & Access</h3>
-                
-                <div style="margin-bottom: 20px;">
-                    <p style="font-size:13px; color:#475569; margin:0 0 8px 0;">Access your raw server files, databases, and emails.</p>
-                    <button id="skyhshoso-cpanel-login-btn" class="skyhshoso-button skyhshoso-button-primary" style="width:100%; justify-content:center;" data-hosting-id="<?php echo esc_attr($hosting_id); ?>" data-nonce="<?php echo esc_attr(wp_create_nonce('skyhshoso_generate_cpanel_login_url_nonce')); ?>">
-                        <?php esc_html_e('Open cPanel', 'skyhs-hosting-solution'); ?>
-                    </button>
-                </div>
-
-                <div style="margin-bottom: 20px; display:flex; justify-content:space-between; align-items:center;">
-                    <div>
-                        <span style="display:block; font-size:14px; font-weight:600; color:#0f172a;">cPanel Password</span>
-                        <span style="font-size:12px; color:#64748b;">Update your server password.</span>
+                <?php if (!$is_external) : ?>
+                    <div id="skyhshoso-disk-usage-container" data-hosting-id="<?php echo esc_attr($hosting_id); ?>">
+                        <span style="display:block; font-size:12px; color:#64748b; font-weight:600; text-transform:uppercase;">Disk Usage</span>
+                        <div style="width:100%; background:#e2e8f0; border-radius:4px; height:8px; margin-top:6px; overflow:hidden;">
+                            <div style="width:30%; background:#94a3b8; height:100%; transition: width 0.5s;" id="skyhs-disk-bar"></div> 
+                        </div>
+                        <span style="font-size:12px; color:#64748b; margin-top:4px; display:inline-block;" id="skyhs-disk-text">Loading metrics...</span>
                     </div>
-                    <button class="skyhshoso-button skyhshoso-button-secondary" id="skyhshoso-trigger-pass-reset" style="padding: 6px 12px; font-size:12px;">Reset</button>
-                </div>
-
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <div>
-                        <span style="display:block; font-size:14px; font-weight:600; color:#0f172a;">SSH Access</span>
-                        <span style="font-size:12px; color:#64748b;">Allow terminal connections.</span>
+                <?php else : ?>
+                    <div style="color:#64748b; font-size:12px;">
+                        <em>Disk usage metrics are managed directly via your cPanel provider.</em>
                     </div>
-                    <label class="skyhshoso-switch">
-                        <input type="checkbox" id="skyhshoso-ssh-toggle" data-hosting-id="<?php echo esc_attr($hosting_id); ?>">
-                        <span class="skyhshoso-slider round"></span>
-                    </label>
-                </div>
+                <?php endif; ?>
             </div>
+            
+            <?php if (!$is_external) : ?>
+                <div class="skyhshoso-detail-card" style="margin:0; padding:24px;">
+                    <h3 style="font-size:16px; font-weight:700; margin-bottom:16px; border-bottom:1px solid #f1f5f9; padding-bottom:8px;">Security & Access</h3>
+                    
+                    <div style="margin-bottom: 20px;">
+                        <p style="font-size:13px; color:#475569; margin:0 0 8px 0;">Access your raw server files, databases, and emails.</p>
+                        <button id="skyhshoso-cpanel-login-btn" class="skyhshoso-button skyhshoso-button-primary" style="width:100%; justify-content:center;" data-hosting-id="<?php echo esc_attr($hosting_id); ?>" data-nonce="<?php echo esc_attr(wp_create_nonce('skyhshoso_generate_cpanel_login_url_nonce')); ?>">
+                            <?php esc_html_e('Open cPanel', 'skyhs-hosting-solution'); ?>
+                        </button>
+                    </div>
 
+                    <div style="margin-bottom: 20px; display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <span style="display:block; font-size:14px; font-weight:600; color:#0f172a;">cPanel Password</span>
+                            <span style="font-size:12px; color:#64748b;">Update your server password.</span>
+                        </div>
+                        <button class="skyhshoso-button skyhshoso-button-secondary" id="skyhshoso-trigger-pass-reset" style="padding: 6px 12px; font-size:12px;">Reset</button>
+                    </div>
+
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <span style="display:block; font-size:14px; font-weight:600; color:#0f172a;">SSH Access</span>
+                            <span style="font-size:12px; color:#64748b;">Allow terminal connections.</span>
+                        </div>
+                        <label class="skyhshoso-switch">
+                            <input type="checkbox" id="skyhshoso-ssh-toggle" data-hosting-id="<?php echo esc_attr($hosting_id); ?>">
+                            <span class="skyhshoso-slider round"></span>
+                        </label>
+                    </div>
+                </div>
+            <?php else : ?>
+                <div class="skyhshoso-detail-card" style="margin:0; padding:24px;">
+                    <h3 style="font-size:16px; font-weight:700; margin-bottom:16px; border-bottom:1px solid #f1f5f9; padding-bottom:8px;">Security & Access</h3>
+                    <div style="margin-bottom: 20px;">
+                        <button id="skyhshoso-cpanel-login-btn" 
+                                data-hosting-id="<?php echo esc_attr($hosting_id); ?>" 
+                                data-is-external="<?php echo $is_external ? '1' : '0'; ?>" 
+                                data-domain="<?php echo esc_attr($hosting_domain); ?>" 
+                                class="skyhshoso-button skyhshoso-button-primary" 
+                                style="width:100%; justify-content:center;">
+                            <?php esc_html_e('Open cPanel', 'skyhs-hosting-solution'); ?>
+                        </button>
+                    </div>
+                    <div class="skyhshoso-detail-card" style="margin-top:24px; padding:24px;">
+                        <h3 style="font-size:16px; font-weight:700; margin-bottom:16px;">Edit Credentials</h3>
+                        <button type="button" class="skyhshoso-button" onclick="jQuery('#edit-cpanel-creds').slideToggle();">Edit Access</button>
+                        
+                        <form id="edit-cpanel-creds" style="display:none; margin-top:16px;">
+                            <input type="hidden" id="edit_hosting_id" value="<?php echo esc_attr($hosting_id); ?>">
+                            <div style="margin-bottom:10px;">
+                                <label>Domain</label>
+                                <input type="text" id="edit_cpanel_domain" value="<?php echo esc_attr(get_post_meta($hosting_id, '_external_cpanel_domain', true)); ?>" style="width:100%;">
+                            </div>
+                            <div style="margin-bottom:10px;">
+                                <label>Username</label>
+                                <input type="text" id="edit_cpanel_username" value="<?php echo esc_attr(get_post_meta($hosting_id, '_external_cpanel_username', true)); ?>" style="width:100%;">
+                            </div>
+                            <div style="margin-bottom:10px;">
+                                <label>API Token</label>
+                                <input type="password" id="edit_cpanel_token" placeholder="Enter new token" style="width:100%;">
+                            </div>
+                            <button type="submit" id="save-creds-btn" class="skyhshoso-button skyhshoso-button-primary">Save Changes</button>
+                            <div id="edit-creds-msg"></div>
+                        </form>
+                    </div>
+                </div>
+            <?php endif; ?>
+            
             <div class="skyhshoso-detail-card skyhshoso-wp-management-card" style="margin:0; padding:24px; grid-column: 1 / -1;">
                 <h3 style="font-size:16px; font-weight:700; margin-bottom:16px; border-bottom:1px solid #f1f5f9; padding-bottom:8px; display:flex; align-items:center; gap:8px;">
                     <svg style="width:20px; height:20px; color:#2563eb;" viewBox="0 0 24 24" fill="currentColor"><path d="M12.158 12.786l-2.698 7.84c.806.236 1.657.365 2.54.365 1.047 0 2.05-.18 2.986-.51-.024-.037-.046-.078-.065-.123l-2.763-7.572zm5.883-7.368c-.682-.315-1.226-.48-1.62-.48-.683 0-1.025.328-1.025.86 0 .46.205 1.05.614 1.77.368.64.914 1.83 1.637 3.56l2.185 5.86c.01-.06.015-.12.015-.18 0-2.313-1.066-6.196-1.806-11.39zm-10.748.24c-.03-.1-.06-.184-.09-.253-.133-.316-.36-.453-.68-.41-.334.043-.88.163-1.64.36l-.37-.87c1.378-.455 2.502-.682 3.37-.682.72 0 1.2.146 1.44.437.24.292.36.702.36 1.23 0 .723-.198 1.806-.593 3.25l-2.457 7.02c-.896-1.144-1.652-2.58-2.268-4.306-.328-.908-.492-1.69-.492-2.348 0-.82.164-1.428.492-1.823.328-.396.908-.63 1.74-.702l.187-.903zm8.396 7.42l-2.253-6.52c-.15-.436-.226-.816-.226-1.14 0-.356.096-.63.288-.82.192-.19.467-.286.824-.286.136 0 .313.018.53.054l.135-.88c-1.32-.206-2.355-.31-3.105-.31-.76 0-1.746.104-2.955.31l.142.87c.238-.035.422-.053.553-.053.385 0 .684.09.897.27.213.18.368.49.464.93l2.872 8.442 3.83-8.868zm-3.69-11.08c-5.522 0-10 4.477-10 10s4.478 10 10 10 10-4.477 10-10-4.478-10-10-10zm0 18.8c-4.86 0-8.8-3.94-8.8-8.8s3.94-8.8 8.8-8.8 8.8 3.94 8.8 8.8-3.94 8.8-8.8 8.8z"/></svg>
@@ -987,34 +1095,38 @@ class SkyHSHOSO_Dashboard_Shortcode {
                 <div style="display:flex; flex-direction:column; gap:16px;">
                     <div>
                         <label style="display:block; font-size:12px; color:#64748b; font-weight:600; text-transform:uppercase; margin-bottom:8px;">Select Site to Manage</label>
-                        <select id="skyhshoso-wp-selector-<?php echo esc_attr($hosting_id); ?>" class="skyhshoso-form-input skyhshoso-wp-site-selector" style="width:100%; padding:10px;" data-hosting-id="<?php echo esc_attr($hosting_id); ?>" data-nonce="<?php echo esc_attr(wp_create_nonce('skyhshoso_wp_nonce')); ?>">
+                        <select id="skyhshoso-wp-selector-<?php echo esc_attr($hosting_id); ?>" class="skyhshoso-form-input skyhshoso-wp-site-selector" style="width:100%; padding:10px;" data-hosting-id="<?php echo esc_attr($hosting_id); ?>" data-is-external="<?php echo $is_external ? '1' : '0'; ?>" data-nonce="<?php echo esc_attr(wp_create_nonce('skyhshoso_wp_nonce')); ?>">
                             <option value="">Scanning server for WP sites...</option>
                         </select>
                     </div>
+                    
                     <div class="skyhshoso-button-group" style="display: flex; gap: 10px; flex-wrap: wrap;">
-                        <button class="skyhshoso-button skyhshoso-button-primary skyhshoso-wp-login-btn" data-hosting-id="<?php echo esc_attr($hosting_id); ?>">
+                        <button class="skyhshoso-button skyhshoso-button-primary skyhshoso-wp-login-btn" data-hosting-id="<?php echo esc_attr($hosting_id); ?>" data-is-external="<?php echo $is_external ? '1' : '0'; ?>">
                             Log into WP Admin
                         </button>
-                        <button class="skyhshoso-button skyhshoso-button-secondary skyhshoso-wp-change-domain-btn" data-hosting-id="<?php echo esc_attr($hosting_id); ?>">
-                            Change Domain
-                        </button>
-                        <button type="button" class="skyhshoso-button skyhshoso-button-secondary" onclick="document.getElementById('skyhshoso-wp-install-modal').style.display='flex';">
-                            <svg style="width:16px; height:16px; margin-right:4px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg> Install New
-                        </button>
+                        
+                        <?php if (!$is_external) : ?>
+                            <button class="skyhshoso-button skyhshoso-button-secondary skyhshoso-wp-change-domain-btn" data-hosting-id="<?php echo esc_attr($hosting_id); ?>">
+                                Change Domain
+                            </button>
+                            <button type="button" class="skyhshoso-button skyhshoso-button-secondary" onclick="document.getElementById('skyhshoso-wp-install-modal').style.display='flex';">
+                                <svg style="width:16px; height:16px; margin-right:4px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg> Install New
+                            </button>
+                        <?php else : ?>
+                            <button class="skyhshoso-button skyhshoso-button-secondary skyhshoso-scan-external-wp-btn" data-hosting-id="<?php echo esc_attr($hosting_id); ?>">
+                                <svg style="width:16px; height:16px; margin-right:4px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Scan for Sites
+                            </button>
+                        <?php endif; ?>
+                    </div>
+
+                    <?php if (!$is_external) : ?>
                         <?php
-                        // Retrieve the synced sets from the plugin settings
                         $options = get_option('skyhshoso_settings_group', array());
                         $allowed_ids = isset($options['wpt_frontend_sets']) ? (array) $options['wpt_frontend_sets'] : array();
                         $sets_cache = isset($options['wpt_sets_cache']) ? json_decode($options['wpt_sets_cache'], true) : array();
-                        ?>
-
-                        <?php
-                        // Pull the authorized engines and default engine from your settings
-                        $options = get_option('skyhshoso_settings_group', array());
                         $enabled_engines = isset($options['wp_installer_engines']) ? (array) $options['wp_installer_engines'] : array('wptoolkit');
                         $default_engine  = isset($options['wp_default_installer_engine']) ? $options['wp_default_installer_engine'] : 'wptoolkit';
                         $allowed_sets    = isset($options['wpt_frontend_sets']) ? (array) $options['wpt_frontend_sets'] : array();
-                        $sets_cache      = isset($options['wpt_sets_cache']) ? json_decode($options['wpt_sets_cache'], true) : array();
 
                         $engine_labels = array(
                             'wptoolkit'    => 'WP Toolkit (Recommended)',
@@ -1050,21 +1162,8 @@ class SkyHSHOSO_Dashboard_Shortcode {
                                 ?>
                             </select>
                         </div>
-
-                        <script>
-                        // Live-toggle the Website Purpose dropdown on the frontend
-                        document.addEventListener('DOMContentLoaded', function() {
-                            var engineSelect = document.getElementById('skyhshoso-wp-installer-engine');
-                            var setWrapper = document.getElementById('skyhshoso-wp-plugin-set-wrapper');
-                            
-                            if(engineSelect && setWrapper) {
-                                engineSelect.addEventListener('change', function() {
-                                    setWrapper.style.display = (this.value === 'wptoolkit') ? 'block' : 'none';
-                                });
-                            }
-                        });
-                        </script>
-                    </div>
+                    <?php endif; ?>
+                    
                     <div id="skyhshoso-wp-message-<?php echo esc_attr($hosting_id); ?>" style="margin-top: 10px; font-size: 13px;"></div>
                 </div>
             </div>
@@ -1072,77 +1171,74 @@ class SkyHSHOSO_Dashboard_Shortcode {
         </div>
 
         <?php 
-        // Generate a clean, unique subdomain based on the primary domain
         $clean_hosting_domain = str_replace(['www.', 'https://', 'http://'], '', $hosting_domain);
-        
         $settings = get_option( 'skyhshoso_settings_group', array() );
         $base_domains_setting = isset($settings['wp_base_domains']) ? $settings['wp_base_domains'] : '';
         $base_domains = array_filter(array_map('trim', explode(',', $base_domains_setting)));
-        
-        // Fallback to the user's primary domain if the admin didn't configure any
         if (empty($base_domains)) {
             $base_domains = [$clean_hosting_domain];
         }
-
-        // Generate a clean, unique prefix
         $unique_prefix = 'wp' . rand(100, 999);
         ?>
-        <div id="skyhshoso-wp-install-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.6); z-index:9999; align-items:center; justify-content:center;">
-            <div style="background:#fff; padding:32px; border-radius:12px; width:100%; max-width:450px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.1);">
-                
-                <div id="skyhshoso-wp-provision-form">
-                    <h3 style="margin-top:0; font-size:20px; color:#0f172a; margin-bottom: 8px;">Install WordPress</h3>
-                    <p style="font-size:13px; color:#64748b; margin-bottom: 24px;">Setup a fresh WordPress environment on this hosting account.</p>
+        
+        <?php if (!$is_external) : ?>
+            <div id="skyhshoso-wp-install-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.6); z-index:9999; align-items:center; justify-content:center;">
+                <div style="background:#fff; padding:32px; border-radius:12px; width:100%; max-width:450px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.1);">
                     
-                    <div style="margin-bottom: 16px;">
-                        <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Domain Name</label>
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <input type="text" id="skyhshoso-wp-domain-prefix" placeholder="e.g., sam" value="<?php echo esc_attr($unique_prefix); ?>" style="flex: 1; padding:10px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box; font-family: monospace; text-align: right;">
-                            <span style="font-weight: 700; color: #64748b;">.</span>
-                            <select id="skyhshoso-wp-domain-base" style="flex: 1.5; padding:10px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box; background: #f8fafc; font-family: monospace;">
-                                <?php foreach ($base_domains as $b_domain) : ?>
-                                    <option value="<?php echo esc_attr($b_domain); ?>"><?php echo esc_html($b_domain); ?></option>
-                                <?php endforeach; ?>
-                            </select>
+                    <div id="skyhshoso-wp-provision-form">
+                        <h3 style="margin-top:0; font-size:20px; color:#0f172a; margin-bottom: 8px;">Install WordPress</h3>
+                        <p style="font-size:13px; color:#64748b; margin-bottom: 24px;">Setup a fresh WordPress environment on this hosting account.</p>
+                        
+                        <div style="margin-bottom: 16px;">
+                            <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Domain Name</label>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <input type="text" id="skyhshoso-wp-domain-prefix" placeholder="e.g., sam" value="<?php echo esc_attr($unique_prefix); ?>" style="flex: 1; padding:10px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box; font-family: monospace; text-align: right;">
+                                <span style="font-weight: 700; color: #64748b;">.</span>
+                                <select id="skyhshoso-wp-domain-base" style="flex: 1.5; padding:10px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box; background: #f8fafc; font-family: monospace;">
+                                    <?php foreach ($base_domains as $b_domain) : ?>
+                                        <option value="<?php echo esc_attr($b_domain); ?>"><?php echo esc_html($b_domain); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <p style="font-size:11px; color:#64748b; margin:6px 0 0 0;">Customize the prefix to create a unique URL for this installation.</p>
                         </div>
-                        <p style="font-size:11px; color:#64748b; margin:6px 0 0 0;">Customize the prefix to create a unique URL for this installation.</p>
+
+                        <div style="margin-bottom: 16px;">
+                            <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Admin Username</label>
+                            <input type="text" id="skyhshoso-wp-admin-user-input" placeholder="admin" value="admin" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box;">
+                        </div>
+
+                        <div style="margin-bottom: 16px;">
+                            <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Admin Password</label>
+                            <input type="text" id="skyhshoso-wp-admin-pass-input" placeholder="Leave blank to auto-generate" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box;">
+                        </div>
+
+                        <div style="margin-bottom: 24px;">
+                            <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Admin Email</label>
+                            <input type="email" id="skyhshoso-wp-admin-email-input" placeholder="admin@<?php echo esc_attr($clean_hosting_domain); ?>" value="admin@<?php echo esc_attr($clean_hosting_domain); ?>" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box;">
+                        </div>
+
+                        <div id="skyhshoso-wp-provision-result" style="margin-bottom: 16px;"></div>
+
+                        <div style="display:flex; justify-content:flex-end; gap:12px;">
+                            <button type="button" class="skyhshoso-button skyhshoso-button-secondary" onclick="document.getElementById('skyhshoso-wp-install-modal').style.display='none';">Cancel</button>
+                            <button type="button" id="skyhshoso-wp-provision-btn" class="skyhshoso-button skyhshoso-button-primary" data-id="<?php echo esc_attr($hosting_id); ?>">Install Now</button>
+                        </div>
                     </div>
 
-                    <div style="margin-bottom: 16px;">
-                        <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Admin Username</label>
-                        <input type="text" id="skyhshoso-wp-admin-user-input" placeholder="admin" value="admin" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box;">
+                    <div id="skyhshoso-wp-loading" style="display:none; flex-direction:column; align-items:center; padding: 40px 0;">
+                        <div id="skyhshoso-wp-load-ring" style="width: 60px; height: 60px; border: 4px solid #e2e8f0; border-top-color: #2563eb; border-radius: 50%; animation: skyhshoso-spin 1s linear infinite; margin-bottom: 20px;"></div>
+                        <div id="skyhshoso-wp-load-icon" style="color:#2563eb; margin-bottom: 16px;"></div>
+                        <div id="skyhshoso-wp-load-check" style="display:none; color:#10b981; margin-bottom: 16px;">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:40px;height:40px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                        </div>
+                        <h3 id="skyhshoso-wp-load-title" style="margin:0 0 8px; font-size:18px; color:#0f172a;">Preparing...</h3>
+                        <p id="skyhshoso-wp-load-msg" style="margin:0; font-size:14px; color:#64748b; transition: opacity 0.2s;">Please wait</p>
                     </div>
 
-                    <div style="margin-bottom: 16px;">
-                        <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Admin Password</label>
-                        <input type="text" id="skyhshoso-wp-admin-pass-input" placeholder="Leave blank to auto-generate" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box;">
-                    </div>
-
-                    <div style="margin-bottom: 24px;">
-                        <label style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">Admin Email</label>
-                        <input type="email" id="skyhshoso-wp-admin-email-input" placeholder="admin@<?php echo esc_attr($clean_hosting_domain); ?>" value="admin@<?php echo esc_attr($clean_hosting_domain); ?>" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box;">
-                    </div>
-
-                    <div id="skyhshoso-wp-provision-result" style="margin-bottom: 16px;"></div>
-
-                    <div style="display:flex; justify-content:flex-end; gap:12px;">
-                        <button type="button" class="skyhshoso-button skyhshoso-button-secondary" onclick="document.getElementById('skyhshoso-wp-install-modal').style.display='none';">Cancel</button>
-                        <button type="button" id="skyhshoso-wp-provision-btn" class="skyhshoso-button skyhshoso-button-primary" data-id="<?php echo esc_attr($hosting_id); ?>">Install Now</button>
-                    </div>
                 </div>
-
-                <div id="skyhshoso-wp-loading" style="display:none; flex-direction:column; align-items:center; padding: 40px 0;">
-                    <div id="skyhshoso-wp-load-ring" style="width: 60px; height: 60px; border: 4px solid #e2e8f0; border-top-color: #2563eb; border-radius: 50%; animation: skyhshoso-spin 1s linear infinite; margin-bottom: 20px;"></div>
-                    <div id="skyhshoso-wp-load-icon" style="color:#2563eb; margin-bottom: 16px;"></div>
-                    <div id="skyhshoso-wp-load-check" style="display:none; color:#10b981; margin-bottom: 16px;">
-                        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:40px;height:40px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-                    </div>
-                    <h3 id="skyhshoso-wp-load-title" style="margin:0 0 8px; font-size:18px; color:#0f172a;">Preparing...</h3>
-                    <p id="skyhshoso-wp-load-msg" style="margin:0; font-size:14px; color:#64748b; transition: opacity 0.2s;">Please wait</p>
-                </div>
-
             </div>
-        </div>
+        <?php endif; ?>
 
         <div id="skyhshoso-pass-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.6); z-index:9999; align-items:center; justify-content:center;">
             <div style="background:#fff; padding:24px; border-radius:12px; width:100%; max-width:400px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.1);">

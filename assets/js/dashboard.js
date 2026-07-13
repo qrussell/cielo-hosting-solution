@@ -1,6 +1,6 @@
 /**
  * SkyHS Dashboard JavaScript
- * Phase 1 UX Master Version: Toasts, Skeletons, & Live DOM Updates
+ * Phase 1 UX Master Version: Toasts, Skeletons, Live DOM Updates & BYOH Routing
  */
 (function() {
     'use strict';
@@ -57,21 +57,19 @@
         toast.innerHTML = `<div class="skyhs-toast-icon">${iconSvg}</div><p class="skyhs-toast-message">${msg}</p>`;
         container.appendChild(toast);
         
-        // Trigger sliding animation
         requestAnimationFrame(() => toast.classList.add('skyhs-toast-visible'));
         
         setTimeout(() => {
             toast.classList.remove('skyhs-toast-visible');
-            setTimeout(() => toast.remove(), 400); // Wait for slide-out transition
+            setTimeout(() => toast.remove(), 400); 
         }, 4500);
     };
 
-    // Global Fleet Scanner Function (Upgraded with Skeletons)
+    // Global Fleet Scanner Function (Internal WHM Target Checking)
     window.skyhshosoProcessAsyncFleetScan = function(hostingIds) {
         var tbody = document.getElementById('skyhshoso-wp-site-tbody');
         if (!tbody) return;
 
-        // PHASE 1: Shimmering Skeleton Loader
         var scanningRow = document.createElement('tr');
         scanningRow.id = 'skyhs-fleet-scanning-row';
         scanningRow.innerHTML = `
@@ -151,118 +149,98 @@
     function initCPanelLogin() {
         document.addEventListener('click', function(e) {
             
-            // 1. WP Toolkit / Main cPanel Button
+            // 1. Open cPanel Button
             var cpanelBtn = e.target.closest('#skyhshoso-cpanel-login-btn, .skyhshoso-cpanel-login-btn, .hm-cpanel-login-btn');
             if (cpanelBtn) {
                 e.preventDefault();
                 
-                // 1. GRAB DATA FIRST
                 var hostingId = cpanelBtn.getAttribute('data-hosting-id');
                 var btnNonce = cpanelBtn.getAttribute('data-nonce') || config.dashboardNonce;
+                var isExternal = cpanelBtn.getAttribute('data-is-external') === '1';
 
-                if (!hostingId) {
-                    window.skyhshosoToast('Error: Hosting ID is missing from this button.', 'error');
-                    return;
-                }
-                
-                // 2. SAVE ORIGINAL HTML TO RESTORE ICONS LATER
-                var origHTML = cpanelBtn.innerHTML; 
-                var txtSpan = cpanelBtn.querySelector('.skyhshoso-button-text');
-                var spinnerHtml = '<span style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin-right:6px;vertical-align:middle;"></span>';
-                
-                if (txtSpan) {
-                    txtSpan.innerHTML = spinnerHtml + 'Connecting...';
+                if (isExternal) {
+                    var domain = cpanelBtn.getAttribute('data-domain'); 
+                    if (domain && domain !== 'Not configured') {
+                        window.open('https://' + domain + ':2083', '_blank');
+                    } else {
+                        window.skyhshosoToast('Error: Domain name not found on this external record.', 'error');
+                    }
                 } else {
+                    if (!hostingId) {
+                        window.skyhshosoToast('Error: Hosting ID is missing from this button.', 'error');
+                        return;
+                    }
+                    
+                    var origHTML = cpanelBtn.innerHTML; 
+                    var spinnerHtml = '<span style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin-right:6px;vertical-align:middle;"></span>';
+                    
                     cpanelBtn.innerHTML = spinnerHtml + 'Connecting...';
+                    cpanelBtn.disabled = true;
+
+                    var fd = new FormData();
+                    fd.append('action', 'skyhshoso_generate_cpanel_login_url');
+                    fd.append('hosting_id', hostingId);
+                    fd.append('nonce', btnNonce);
+
+                    fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fd) })
+                    .then(r => r.json())
+                    .then(d => {
+                        if (d.success && d.data && d.data.login_url) {
+                            window.open(d.data.login_url, '_blank');
+                        } else {
+                            window.skyhshosoToast('Failed to connect: ' + (d.data ? d.data.message : 'Unauthorized'), 'error');
+                        }
+                        cpanelBtn.innerHTML = origHTML; 
+                        cpanelBtn.disabled = false;
+                    }).catch(() => {
+                        window.skyhshosoToast('A network connection error occurred.', 'error');
+                        cpanelBtn.innerHTML = origHTML; 
+                        cpanelBtn.disabled = false;
+                    });
                 }
-                
-                cpanelBtn.disabled = true;
-
-                // 3. FIRE AJAX
-                var fd = new FormData();
-                fd.append('action', 'skyhshoso_generate_cpanel_login_url');
-                fd.append('hosting_id', hostingId);
-                fd.append('nonce', btnNonce);
-
-                fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fd) })
-                .then(r => r.json())
-                .then(d => {
-                    if (d.success && d.data && d.data.login_url) {
-                        window.open(d.data.login_url, '_blank');
-                    } else {
-                        window.skyhshosoToast('Failed to connect: ' + (d.data ? d.data.message : 'Unauthorized'), 'error');
-                    }
-                    cpanelBtn.innerHTML = origHTML; 
-                    cpanelBtn.disabled = false;
-                }).catch(() => {
-                    window.skyhshosoToast('A network connection error occurred.', 'error');
-                    cpanelBtn.innerHTML = origHTML; 
-                    cpanelBtn.disabled = false;
-                });
             }
 
-            // 2. Direct SSO Button (WP Sites Tab)
-            var directSsoBtn = e.target.closest('.skyhshoso-wp-direct-sso-btn');
-            if (directSsoBtn) {
-                e.preventDefault();
-                
-                // 1. GRAB DATA FIRST
-                var hId = directSsoBtn.getAttribute('data-hosting-id');
-                var sUrl = directSsoBtn.getAttribute('data-site-url');
-                var n = directSsoBtn.getAttribute('data-nonce') || config.dashboardNonce;
-                
-                // 2. DOM MANIPULATION
-                var origDirectHTML = directSsoBtn.innerHTML;
-                directSsoBtn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin-right:6px;vertical-align:middle;"></span>';
-                directSsoBtn.disabled = true;
-
-                var fd = new FormData();
-                fd.append('action', 'skyhshoso_generate_wp_sso');
-                fd.append('hosting_id', hId);
-                fd.append('site_url', sUrl);
-                fd.append('nonce', n);
-
-                fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fd) })
-                .then(r => r.json())
-                .then(d => {
-                    directSsoBtn.disabled = false;
-                    directSsoBtn.innerHTML = origDirectHTML;
-                    if (d.success && d.data && d.data.url) {
-                        window.open(d.data.url, '_blank');
-                    } else {
-                        window.skyhshosoToast('SSO Failed: ' + (d.data ? d.data.message : 'Unknown error'), 'error');
-                    }
-                }).catch(err => {
-                    directSsoBtn.disabled = false;
-                    directSsoBtn.innerHTML = origDirectHTML;
-                    window.skyhshosoToast('A network connection error occurred.', 'error');
-                });
-            }
-
-            // 3. Dropdown SSO Button (Hosting Tab) - THE RESTORED BUTTON!
-            var detailWpLoginBtn = e.target.closest('.skyhshoso-wp-login-btn');
+            // 2. WP Admin Single Sign-On Router
+            var detailWpLoginBtn = e.target.closest('.skyhshoso-wp-login-btn, .skyhshoso-wp-direct-sso-btn');
             if (detailWpLoginBtn) {
                 e.preventDefault();
                 
-                // 1. GRAB DATA FIRST
                 var hwId = detailWpLoginBtn.getAttribute('data-hosting-id');
-                var selector = document.getElementById('skyhshoso-wp-selector-' + hwId);
-                var swUrl = selector ? selector.value : '';
+                var isExternal = detailWpLoginBtn.getAttribute('data-is-external') === '1';
+                var isDirect = detailWpLoginBtn.classList.contains('skyhshoso-wp-direct-sso-btn');
+                var swUrl = '';
+
+                if (isDirect) {
+                    swUrl = detailWpLoginBtn.getAttribute('data-site-url');
+                } else {
+                    var selector = document.getElementById('skyhshoso-wp-selector-' + hwId);
+                    swUrl = selector ? selector.value : '';
+                }
                 
                 if (!swUrl) {
                     window.skyhshosoToast('Please select a WP site from the dropdown first.', 'error');
                     return;
                 }
 
+                // IF EXTERNAL: Act as a smart shortcut directly to their wp-admin screen.
+                if (isExternal) {
+                    var cleanUrl = swUrl.replace(/\/$/, ''); // Remove trailing slash if present
+                    window.open(cleanUrl + '/wp-admin/', '_blank');
+                    return; // Stop execution here. No AJAX needed!
+                }
+
+                // IF INTERNAL: Use WHM Root to generate secure passwordless SSO
                 var n = detailWpLoginBtn.getAttribute('data-nonce') || config.dashboardNonce;
 
-                // 2. DOM MANIPULATION
                 var origLoginHTML = detailWpLoginBtn.innerHTML;
                 detailWpLoginBtn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin-right:6px;vertical-align:middle;"></span>';
                 detailWpLoginBtn.disabled = true;
 
+                var ssoWindow = window.open('', '_blank');
+                ssoWindow.document.write('<div style="font-family:sans-serif; text-align:center; margin-top:100px; color:#475569;"><h2>Authenticating Secure Session...</h2><p>Please wait while we log you in.</p></div>');
+
                 var fdl = new FormData();
-                fdl.append('action', 'skyhshoso_generate_wp_sso');
+                fdl.append('action', 'skyhshoso_generate_wp_sso'); // Internal SSO Action
                 fdl.append('hosting_id', hwId);
                 fdl.append('site_url', swUrl);
                 fdl.append('nonce', n);
@@ -272,20 +250,23 @@
                 .then(d => {
                     detailWpLoginBtn.disabled = false;
                     detailWpLoginBtn.innerHTML = origLoginHTML;
+                    
                     if (d.success && d.data && d.data.url) {
-                        window.open(d.data.url, '_blank');
+                        ssoWindow.location.href = d.data.url;
                     } else {
+                        ssoWindow.close(); 
                         window.skyhshosoToast('SSO Failed: ' + (d.data ? d.data.message : 'Unknown error'), 'error');
                     }
                 })
                 .catch(err => {
+                    ssoWindow.close();
                     detailWpLoginBtn.disabled = false;
                     detailWpLoginBtn.innerHTML = origLoginHTML;
                     window.skyhshosoToast('A network connection error occurred.', 'error');
                 });
             }
 
-            // 4. Change Domain Button (PHASE 1 Live Updates)
+            // 3. Change Domain Button (PHASE 1 Live Updates)
             var changeDomainBtn = e.target.closest('.skyhshoso-wp-change-domain-btn');
             if (changeDomainBtn) {
                 e.preventDefault();
@@ -372,98 +353,130 @@
         });
     }
 
-    // --- WP SITE ASYNC SCANNER FOR DROPDOWN ---
+    // --- WP SITE ASYNC SCANNER FOR DROPDOWN (Environment Aware) ---
     function initWpSiteScanner() {
         var wpSelectors = document.querySelectorAll('.skyhshoso-wp-site-selector');
         wpSelectors.forEach(function(selector) {
             var hostingId = selector.getAttribute('data-hosting-id');
+            var isExternal = selector.getAttribute('data-is-external') === '1';
             var nonce = selector.getAttribute('data-nonce') || config.dashboardNonce;
             
             selector.innerHTML = '<option value="" disabled>Locating installations...</option>';
             
-            var fd = new FormData();
-            fd.append('action', 'skyhshoso_scan_wp_sites');
-            fd.append('hosting_id', hostingId);
-            fd.append('nonce', nonce);
+            if (isExternal) {
+                // EXTERNAL: Use the Fileman Scanner
+                var fdExt = new FormData();
+                fdExt.append('action', 'skyhshoso_scan_external_wp');
+                fdExt.append('hosting_id', hostingId);
+                fdExt.append('nonce', nonce);
 
-            fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fd) })
-                .then(function(r) { return r.json(); })
-                .then(function(res) {
+                fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fdExt) })
+                .then(r => r.json())
+                .then(res => {
                     selector.innerHTML = ''; 
-                    var existingUrls = [];
-                    
-                    if(res.success && res.data.local_sites && res.data.local_sites.length > 0) {
-                        res.data.local_sites.forEach(function(site) {
-                            var cleanUrl = site.url.replace(/^https?:\/\//,'');
-                            existingUrls.push(cleanUrl);
+                    if (res.success && res.data.sites && res.data.sites.length > 0) {
+                        res.data.sites.forEach(function(site) {
+                            var cleanUrl = site.url.replace(/^https?:\/\//,'').replace(/\/$/, '');
                             var option = document.createElement('option');
                             option.value = site.url; 
-                            option.setAttribute('data-docroot', site.doc_root || site.path);
-                            option.setAttribute('data-insid', site.insid || '');
+                            option.setAttribute('data-docroot', site.path || '');
                             option.textContent = cleanUrl;
                             selector.appendChild(option);
                         });
+                    } else {
+                        selector.innerHTML = '<option value="">No WP sites found</option>';
                     }
-
-                    var scanOpt = document.createElement('option');
-                    scanOpt.value = "";
-                    scanOpt.disabled = true;
-                    scanOpt.textContent = "Scanning directories...";
-                    selector.appendChild(scanOpt);
-
-                    var tFd = new FormData();
-                    tFd.append('action', 'skyhshoso_get_scan_targets');
-                    tFd.append('hosting_id', hostingId);
-                    tFd.append('nonce', nonce);
-
-                    fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(tFd) })
-                    .then(r => r.json())
-                    .then(d => {
-                        if (d.success && d.data.targets) {
-                            var targetPromises = d.data.targets.map(function(target) {
-                                var cFd = new FormData();
-                                cFd.append('action', 'skyhshoso_check_wp_target');
-                                cFd.append('hosting_id', hostingId);
-                                cFd.append('username', d.data.username);
-                                cFd.append('doc_root', target.doc_root);
-                                cFd.append('url', target.url);
-                                cFd.append('nonce', nonce);
-
-                                return fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(cFd) })
-                                .then(r => r.json())
-                                .then(checkRes => {
-                                    if (checkRes.success && checkRes.data.is_wp) {
-                                        var cleanUrl = target.url.replace(/^https?:\/\//,'');
-                                        if (!existingUrls.includes(cleanUrl)) {
-                                            existingUrls.push(cleanUrl);
-                                            var tempSel = document.createElement('select');
-                                            tempSel.innerHTML = checkRes.data.option_html;
-                                            
-                                            // Strip https for display
-                                            var newOpt = tempSel.firstChild;
-                                            newOpt.textContent = cleanUrl;
-                                            
-                                            selector.insertBefore(newOpt, scanOpt);
-                                        }
-                                    }
-                                }).catch(()=>{});
-                            });
-                            
-                            Promise.all(targetPromises).then(function() {
-                                scanOpt.remove();
-                                if (existingUrls.length === 0) {
-                                    selector.innerHTML = '<option value="">No WP Installations Found</option>';
-                                }
-                                var loginBtn = document.querySelector('.skyhshoso-wp-login-btn[data-hosting-id="'+hostingId+'"]');
-                                if (loginBtn) loginBtn.disabled = false;
-                                var domainBtn = document.querySelector('.skyhshoso-wp-change-domain-btn[data-hosting-id="'+hostingId+'"]');
-                                if (domainBtn) domainBtn.disabled = false;
-                            });
-                        } else {
-                            scanOpt.remove();
-                        }
-                    }).catch(()=>{ scanOpt.remove(); });
+                    var loginBtn = document.querySelector('.skyhshoso-wp-login-btn[data-hosting-id="'+hostingId+'"]');
+                    if (loginBtn) loginBtn.disabled = false;
+                }).catch(() => {
+                    selector.innerHTML = '<option value="">Scan failed</option>';
                 });
+
+            } else {
+                // INTERNAL: Use the Native WHM Scanner
+                var fd = new FormData();
+                fd.append('action', 'skyhshoso_scan_wp_sites');
+                fd.append('hosting_id', hostingId);
+                fd.append('nonce', nonce);
+
+                fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fd) })
+                    .then(function(r) { return r.json(); })
+                    .then(function(res) {
+                        selector.innerHTML = ''; 
+                        var existingUrls = [];
+                        
+                        if(res.success && res.data.local_sites && res.data.local_sites.length > 0) {
+                            res.data.local_sites.forEach(function(site) {
+                                var cleanUrl = site.url.replace(/^https?:\/\//,'').replace(/\/$/, '');
+                                existingUrls.push(cleanUrl);
+                                var option = document.createElement('option');
+                                option.value = site.url; 
+                                option.setAttribute('data-docroot', site.doc_root || site.path);
+                                option.setAttribute('data-insid', site.insid || '');
+                                option.textContent = cleanUrl;
+                                selector.appendChild(option);
+                            });
+                        }
+
+                        var scanOpt = document.createElement('option');
+                        scanOpt.value = "";
+                        scanOpt.disabled = true;
+                        scanOpt.textContent = "Scanning directories...";
+                        selector.appendChild(scanOpt);
+
+                        var tFd = new FormData();
+                        tFd.append('action', 'skyhshoso_get_scan_targets');
+                        tFd.append('hosting_id', hostingId);
+                        tFd.append('nonce', nonce);
+
+                        fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(tFd) })
+                        .then(r => r.json())
+                        .then(d => {
+                            if (d.success && d.data.targets) {
+                                var targetPromises = d.data.targets.map(function(target) {
+                                    var cFd = new FormData();
+                                    cFd.append('action', 'skyhshoso_check_wp_target');
+                                    cFd.append('hosting_id', hostingId);
+                                    cFd.append('username', d.data.username);
+                                    cFd.append('doc_root', target.doc_root);
+                                    cFd.append('url', target.url);
+                                    cFd.append('nonce', nonce);
+
+                                    return fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(cFd) })
+                                    .then(r => r.json())
+                                    .then(checkRes => {
+                                        if (checkRes.success && checkRes.data.is_wp) {
+                                            var cleanUrl = target.url.replace(/^https?:\/\//,'');
+                                            if (!existingUrls.includes(cleanUrl)) {
+                                                existingUrls.push(cleanUrl);
+                                                var tempSel = document.createElement('select');
+                                                tempSel.innerHTML = checkRes.data.option_html;
+                                                
+                                                var newOpt = tempSel.firstChild;
+                                                newOpt.textContent = cleanUrl;
+                                                
+                                                selector.insertBefore(newOpt, scanOpt);
+                                            }
+                                        }
+                                    }).catch(()=>{});
+                                });
+                                
+                                Promise.all(targetPromises).then(function() {
+                                    scanOpt.remove();
+                                    if (existingUrls.length === 0) {
+                                        selector.innerHTML = '<option value="">No WP Installations Found</option>';
+                                    }
+                                    var loginBtn = document.querySelector('.skyhshoso-wp-login-btn[data-hosting-id="'+hostingId+'"]');
+                                    if (loginBtn) loginBtn.disabled = false;
+                                    var domainBtn = document.querySelector('.skyhshoso-wp-change-domain-btn[data-hosting-id="'+hostingId+'"]');
+                                    if (domainBtn) domainBtn.disabled = false;
+                                });
+                            } else {
+                                scanOpt.remove();
+                            }
+                        }).catch(()=>{ scanOpt.remove(); });
+                    });
+            }
         });
     }
 
@@ -507,14 +520,12 @@
                 if (resultEl) resultEl.innerHTML = '<p style="color:#d63638;font-size:13px;">Please enter a domain.</p>';
                 return;
             }
-			// Capture the chosen Installer Engine
+            
             var engineSelect = document.getElementById('skyhshoso-wp-installer-engine');
             var installerEngine = engineSelect ? engineSelect.value : '';
-
-            // Capture the chosen Plugin Set ID
             var setSelect = document.getElementById('skyhshoso-wp-plugin-set');
             var pluginSetId = setSelect ? setSelect.value : '0';
-			
+            
             if (formView) formView.style.display = 'none';
             if (loadingView) loadingView.style.display = 'flex';
 
@@ -619,7 +630,6 @@
 
         var totalPages = parseInt(container.getAttribute('data-total-pages')) || 1;
         var currentPage = parseInt(container.getAttribute('data-current-page')) || 1;
-        var searchTerm = '';
 
         function fetchPage(page, search) {
             var fd = new FormData();
@@ -645,8 +655,8 @@
         
         if (cfg.autoFetch) fetchPage(1, '');
     }
-	
-	// --- TWO-WAY SERVER MANAGEMENT ---
+    
+    // --- TWO-WAY SERVER MANAGEMENT ---
     function initAccountManagement() {
         document.addEventListener('click', function(e) {
 
@@ -669,7 +679,7 @@
                     syncBtn.innerHTML = origHtml;
                     if (d.success) {
                         window.skyhshosoToast(d.data.message, 'success');
-                        setTimeout(() => window.location.reload(), 1500); // Reload to show updated stats
+                        setTimeout(() => window.location.reload(), 1500); 
                     } else {
                         window.skyhshosoToast(d.data.message, 'error');
                     }
@@ -697,7 +707,7 @@
                 fd.append('status_action', action);
                 fd.append('nonce', config.dashboardNonce);
 
-                fetch(config.ajaxUrl, { method: 'POST', body: newSearchParams(fd) })
+                fetch(config.ajaxUrl, { method: 'POST', body: new URLSearchParams(fd) })
                 .then(r => r.json()).then(d => {
                     if (d.success) {
                         window.skyhshosoToast(d.data.message, 'success');
@@ -754,12 +764,12 @@
     }
 
     function init() {
-        injectModernStyles(); // Inject CSS for Toasts & Skeletons
+        injectModernStyles(); 
         initRedirect();
         initCPanelLogin();
         initWpSiteProvision();
         initWpSiteScanner(); 
-		initAccountManagement();
+        initAccountManagement();
 
         if (document.getElementById('skyhshoso-wp-site-pagination')) {
             setupPagination({
@@ -784,7 +794,68 @@ jQuery(document).ready(function($) {
     var ajaxurl = skyhshosoDashboard.ajaxUrl;
     var nonce = skyhshosoDashboard.nonce;
 
-    // --- 1. Password Reset Modal ---
+    // --- ADD EXTERNAL CPANEL ACCOUNT (MODAL FORM) ---
+    $('#skyhs-add-external-form').on('submit', function(e) {
+        e.preventDefault();
+        
+        var btn = $('#ext_cpanel_submit_btn');
+        var msgBox = $('#ext_cpanel_message');
+        
+        var domain = $('#ext_cpanel_domain').val();
+        var username = $('#ext_cpanel_user').val();
+        var token = $('#ext_cpanel_token').val();
+        
+        btn.prop('disabled', true).text('Verifying Connection...');
+        msgBox.css('color', '#64748b').text('Testing credentials against remote server...');
+
+        $.post(ajaxurl, {
+            action: 'skyhshoso_add_external_cpanel',
+            domain: domain,
+            username: username,
+            api_token: token,
+            nonce: nonce
+        }, function(res) {
+            if (res.success) {
+                msgBox.css('color', '#10b981').text(res.data.message);
+                btn.text('Connected!');
+                setTimeout(function() { location.reload(); }, 1500);
+            } else {
+                msgBox.css('color', '#ef4444').text('Error: ' + res.data.message);
+                btn.prop('disabled', false).text('Connect Account');
+            }
+        }).fail(function() {
+            msgBox.css('color', '#ef4444').text('Network error. Check your server firewall.');
+            btn.prop('disabled', false).text('Connect Account');
+        });
+    });
+
+    // --- EDIT EXTERNAL CREDENTIALS ---
+    $('#edit-cpanel-creds').on('submit', function(e) {
+        e.preventDefault();
+        var btn = $('#save-creds-btn');
+        var msgBox = $('#edit-creds-msg');
+        
+        btn.prop('disabled', true).text('Saving...');
+        
+        $.post(ajaxurl, {
+            action: 'skyhshoso_update_external_cpanel',
+            nonce: nonce,
+            hosting_id: $('#edit_hosting_id').val(),
+            cpanel_domain: $('#edit_cpanel_domain').val(),
+            cpanel_username: $('#edit_cpanel_username').val(),
+            cpanel_api_token: $('#edit_cpanel_token').val()
+        }, function(res) {
+            if (res.success) {
+                msgBox.css('color', '#10b981').text(res.data.message);
+                setTimeout(function() { location.reload(); }, 1000);
+            } else {
+                msgBox.css('color', '#ef4444').text(res.data.message);
+                btn.prop('disabled', false).text('Save Changes');
+            }
+        });
+    });
+
+    // --- Password Reset Modal ---
     $('#skyhshoso-trigger-pass-reset').on('click', function(e) {
         e.preventDefault();
         $('#skyhs-new-pass').val('');
@@ -829,7 +900,7 @@ jQuery(document).ready(function($) {
         });
     });
 
-    // --- 2. SSH Access Toggle ---
+    // --- SSH Access Toggle ---
     $('#skyhshoso-ssh-toggle').on('change', function() {
         var isChecked = $(this).is(':checked');
         var hostingId = $(this).data('hosting-id');
@@ -855,18 +926,17 @@ jQuery(document).ready(function($) {
         });
     });
 
-    // --- 3. Live Stats Fetcher ---
+    // --- Live Stats Fetcher ---
     function fetchCpanelStats() {
         var statsGrid = $('.skyhshoso-stats-grid');
         var diskContainer = $('#skyhshoso-disk-usage-container');
 
         if (statsGrid.length > 0 || diskContainer.length > 0) {
             var hostingId = statsGrid.length > 0 ? statsGrid.data('hosting-id') : diskContainer.data('hosting-id');
-            var fetchNonce = (typeof nonce !== 'undefined') ? nonce : (typeof skyhshosoDashboard !== 'undefined' ? skyhshosoDashboard.nonce : '');
 
             $.post(ajaxurl, {
                 action: 'skyhshoso_get_cpanel_stats',
-                nonce: fetchNonce,
+                nonce: nonce,
                 hosting_id: hostingId
             }, function(res) {
                 $('.skyhshoso-cpanel-refresh-btn span').text('↻ Refresh');
@@ -878,7 +948,7 @@ jQuery(document).ready(function($) {
                         $('#skyhshoso-ssh-toggle').prop('checked', res.data.ssh_active);
                     }
 
-                    if (s.diskusage && $('#skyhs-disk-bar').length) {
+                    if (s && s.diskusage && $('#skyhs-disk-bar').length) {
                         var percent = parseFloat(s.diskusage.percent);
                         var val = s.diskusage.value;
                         var max = s.diskusage.max;
@@ -891,7 +961,7 @@ jQuery(document).ready(function($) {
                         $('#skyhs-disk-text').text(val + ' used of ' + maxText);
                     }
 
-                    if (statsGrid.length > 0) {
+                    if (statsGrid.length > 0 && s) {
                         var gridHtml = '';
                         var displayMap = [
                             { id: 'diskusage', icon: '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" width="24" height="24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path></svg>', title: 'Disk Usage' },
@@ -935,45 +1005,41 @@ jQuery(document).ready(function($) {
         }
     }
 
-    // Run stats fetcher on page load
     fetchCpanelStats();
 
-    // Wire up the manual refresh button to the fetcher
     $('.skyhshoso-cpanel-refresh-btn').off('click').on('click', function(e) {
         e.preventDefault();
         $(this).find('span').text('↻ Syncing...');
         fetchCpanelStats();
     });
 
-    // --- 4. Secure Sync Server Status ---
+    // --- Secure Sync Server Status ---
     $('.skyhs-secure-sync-btn').off('click').on('click', function(e) {
         e.preventDefault();
         var btn = $(this);
         var originalHtml = btn.html();
-        var fetchNonce = (typeof nonce !== 'undefined') ? nonce : (typeof skyhshosoDashboard !== 'undefined' ? skyhshosoDashboard.nonce : '');
         
         btn.html('Syncing...').prop('disabled', true).css('opacity', '0.6');
         
         $.post(ajaxurl, {
             action: 'skyhshoso_frontend_sync',
-            nonce: fetchNonce,
+            nonce: nonce,
             hosting_id: btn.data('hosting-id')
         }, function(res) {
             btn.html(originalHtml).prop('disabled', false).css('opacity', '1');
-            alert(res.data ? res.data.message : 'Synced');
+            window.skyhshosoToast(res.data ? res.data.message : 'Synced', res.success ? 'success' : 'error');
             if (res.success) location.reload();
         }).fail(function() {
             btn.html(originalHtml).prop('disabled', false).css('opacity', '1');
-            alert('Server connection error.');
+            window.skyhshosoToast('Server connection error.', 'error');
         });
     });
 
-    // --- 5. Secure Suspend / Unsuspend Server ---
+    // --- Secure Suspend / Unsuspend Server ---
     $('.skyhs-secure-toggle-btn').off('click').on('click', function(e) {
         e.preventDefault();
         var btn = $(this);
         var act = btn.data('action');
-        var fetchNonce = (typeof nonce !== 'undefined') ? nonce : (typeof skyhshosoDashboard !== 'undefined' ? skyhshosoDashboard.nonce : '');
         
         if(!confirm('Are you sure you want to ' + act + ' this server?')) return;
         
@@ -982,45 +1048,63 @@ jQuery(document).ready(function($) {
         
         $.post(ajaxurl, {
             action: 'skyhshoso_frontend_toggle_status',
-            nonce: fetchNonce,
+            nonce: nonce,
             hosting_id: btn.data('hosting-id'),
             account_action: act
         }, function(res) {
-            alert(res.data ? res.data.message : 'Updated');
-            location.reload();
+            window.skyhshosoToast(res.data ? res.data.message : 'Updated', res.success ? 'success' : 'error');
+            setTimeout(() => location.reload(), 1500);
         }).fail(function() {
             btn.html(originalHtml).prop('disabled', false).css('opacity', '1');
-            alert('Server connection error.');
+            window.skyhshosoToast('Server connection error.', 'error');
         });
     });
 
-    // --- 6. Secure Terminate Server (Delete) ---
+    // --- Secure Terminate Server (Delete / Remove) ---
     $('.skyhs-secure-terminate-btn').off('click').on('click', function(e) {
         e.preventDefault();
         var btn = $(this);
+        var isExternal = btn.data('is-external') == '1';
         var fetchNonce = (typeof nonce !== 'undefined') ? nonce : (typeof skyhshosoDashboard !== 'undefined' ? skyhshosoDashboard.nonce : '');
         
-        if(!confirm('DANGER: This will permanently delete this cPanel account, all files, and databases from the server! Continue?')) return;
+        // Smart Context Warning
+        if (isExternal) {
+            if(!confirm('Are you sure you want to remove this external server connection? No files on the actual server will be affected.')) return;
+        } else {
+            var text1 = "DANGER: Are you sure you want to permanently delete this account?";
+            var text2 = "This will permanently destroy all files, databases, and emails on the server. Your subscription will be cancelled immediately. This cannot be undone.\n\nType 'DELETE' to confirm:";
+            
+            if (!confirm(text1)) return;
+            var verify = prompt(text2);
+            if (verify !== 'DELETE') {
+                window.skyhshosoToast('Termination cancelled.', 'success');
+                return;
+            }
+        }
         
         var originalHtml = btn.html();
-        btn.html('Deleting...').prop('disabled', true).css('opacity', '0.6');
+        btn.html(isExternal ? 'Removing...' : 'Deleting...').prop('disabled', true).css('opacity', '0.6');
         
-        $.post(ajaxurl, {
+        $.post(config.ajaxUrl, {
             action: 'skyhshoso_frontend_terminate',
             nonce: fetchNonce,
             hosting_id: btn.data('hosting-id')
         }, function(res) {
             if (res.success) {
-                alert(res.data.message);
-                window.location.href = window.location.href.split('&hosting_id')[0]; 
+                window.skyhshosoToast(res.data.message, 'success');
+                var row = btn.closest('tr');
+                if (row) {
+                    row.style.opacity = '0.3';
+                    row.style.pointerEvents = 'none';
+                }
+                setTimeout(() => window.location.href = window.location.href.split('&hosting_id')[0], 1500);
             } else {
                 btn.html(originalHtml).prop('disabled', false).css('opacity', '1');
-                alert('Deletion Failed: ' + res.data.message);
+                window.skyhshosoToast(res.data.message, 'error');
             }
         }).fail(function() {
             btn.html(originalHtml).prop('disabled', false).css('opacity', '1');
-            alert('Server connection error.');
+            window.skyhshosoToast('Server connection error.', 'error');
         });
     });
 });
-
