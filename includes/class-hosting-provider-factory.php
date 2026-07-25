@@ -18,10 +18,25 @@ class SkyHSHOSO_Provider_Factory {
             $server_type = 'whm'; 
         }
 
-        // 2. Fetch the credentials for this server
-        $host  = get_post_meta($server_id, '_skyhshoso_whm_host', true);
-        $user  = get_post_meta($server_id, '_skyhshoso_whm_user_id', true);
-        $token = get_post_meta($server_id, '_skyhshoso_whm_token', true);
+        $type  = get_post_meta($server_id, '_skyhshoso_server_type', true) ?: 'whm';
+		$host  = get_post_meta($server_id, '_skyhshoso_whm_host', true);
+		$user  = get_post_meta($server_id, '_skyhshoso_whm_user_id', true);
+		$token = get_post_meta($server_id, '_skyhshoso_whm_token', true);
+
+		// Fetch the port, fallback to default if somehow blank
+		$port  = get_post_meta($server_id, '_skyhshoso_server_port', true);
+		if (empty($port)) {
+			$port = ($type === 'hestiacp') ? '8083' : (($type === 'wordops') ? '22' : '2087');
+		}
+
+		// Pass it into the driver
+		if ($type === 'hestiacp' && class_exists('SkyHSHOSO_HestiaCP_Driver')) {
+			return new SkyHSHOSO_HestiaCP_Driver($host, $user, $token, $port);
+		}
+		if ($type === 'whm' && class_exists('SkyHSHOSO_WHM_Driver')) {
+			return new SkyHSHOSO_WHM_Driver($host, $user, $token, $port);
+		}
+		// ... repeat for whm and wordops
 
         if (empty($host) || empty($token)) {
             return new WP_Error('missing_credentials', 'Server API credentials are not fully configured.');

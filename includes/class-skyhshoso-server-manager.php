@@ -2,7 +2,7 @@
 /**
  * SkyHS Server Manager
  *
- * Custom admin page for managing WHM servers.
+ * Custom admin page for managing WHM, HestiaCP, and WordOps servers.
  * Replaces native post-new.php with guided UI.
  *
  * @package Hosting_Solution
@@ -28,7 +28,7 @@ class SkyHSHOSO_Server_Manager {
         add_action( 'wp_ajax_skyhshoso_save_server', array( $this, 'ajax_save_server' ) );
         // AJAX: delete server
         add_action( 'wp_ajax_skyhshoso_delete_server', array( $this, 'ajax_delete_server' ) );
-        // AJAX: test WHM connection + sync
+        // AJAX: test connection + sync
         add_action( 'wp_ajax_skyhshoso_test_whm', array( $this, 'ajax_test_whm' ) );
     }
 
@@ -36,7 +36,7 @@ class SkyHSHOSO_Server_Manager {
      * Enqueue scripts/styles.
      */
     public function enqueue_scripts( $hook ) {
-        $page = isset( $_GET['page'] ) ? sanitize_key( $_GET['page'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        $page = isset( $_GET['page'] ) ? sanitize_key( $_GET['page'] ) : ''; 
         if ( false === strpos( $hook, 'skyhshoso-servers' ) && 'skyhshoso-servers' !== $page ) {
             return;
         }
@@ -48,13 +48,12 @@ class SkyHSHOSO_Server_Manager {
             SKYHSHOSO_VERSION
         );
 
-        wp_enqueue_script(
-            'skyhshoso-server-manager',
-            SKYHSHOSO_PLUGIN_URL . 'assets/js/server-manager.js',
-            array( 'jquery' ),
-            SKYHSHOSO_VERSION,
-            true
-        );
+        // CLOUDFLARE BYPASS: We deregister the old physical file to prevent collisions
+        wp_deregister_script('skyhshoso-server-manager');
+
+        // Register our new "virtual" script to hold the localized variables
+        wp_register_script( 'skyhshoso-server-manager-inline', false );
+        wp_enqueue_script( 'skyhshoso-server-manager-inline' );
 
         $servers = get_posts( array(
             'post_type'      => 'skyhshoso_server',
@@ -65,16 +64,24 @@ class SkyHSHOSO_Server_Manager {
 
         $server_list = array();
         foreach ( $servers as $s ) {
+            $type = get_post_meta( $s->ID, '_skyhshoso_server_type', true ) ?: 'whm';
+            $port = get_post_meta( $s->ID, '_skyhshoso_server_port', true );
+            
+            if (empty($port)) {
+                $port = ($type === 'hestiacp') ? '8083' : (($type === 'wordops') ? '22' : '2087');
+            }
+
             $plans = get_post_meta( $s->ID, '_skyhshoso_whm_default_package_names', true );
             $last_sync = get_post_meta( $s->ID, '_skyhshoso_whm_last_sync_time', true );
             $last_error = get_post_meta( $s->ID, '_skyhshoso_whm_last_error', true );
-
             $server_ns = get_post_meta( $s->ID, '_skyhshoso_server_nameservers', true );
+            
             $server_list[] = array(
                 'id'          => $s->ID,
                 'name'        => $s->post_title,
-                'type'        => get_post_meta( $s->ID, '_skyhshoso_server_type', true ) ?: 'whm', // Added Type
+                'type'        => $type,
                 'host'        => get_post_meta( $s->ID, '_skyhshoso_whm_host', true ),
+                'port'        => $port,
                 'user'        => get_post_meta( $s->ID, '_skyhshoso_whm_user_id', true ),
                 'token'       => get_post_meta( $s->ID, '_skyhshoso_whm_token', true ),
                 'server_ip'   => get_post_meta( $s->ID, '_skyhshoso_server_ip', true ),
@@ -88,7 +95,7 @@ class SkyHSHOSO_Server_Manager {
         }
 
         wp_localize_script(
-            'skyhshoso-server-manager',
+            'skyhshoso-server-manager-inline',
             'skyhshoso_sm',
             array(
                 'ajax_url'          => admin_url( 'admin-ajax.php' ),
@@ -154,6 +161,7 @@ class SkyHSHOSO_Server_Manager {
                                     <select id="sm_type" name="server_type" class="sm-input">
                                         <option value="whm">cPanel / WHM</option>
                                         <option value="hestiacp">HestiaCP</option>
+                                        <option value="wordops">WordOps</option>
                                     </select>
                                     <p class="sm-field-desc"><?php esc_html_e( 'Select the server control panel API.', 'skyhs-hosting-solution' ); ?></p>
                                 </div>
@@ -164,11 +172,14 @@ class SkyHSHOSO_Server_Manager {
                             <h3 id="sm_section_connection_title"><?php esc_html_e( 'Connection Settings', 'skyhs-hosting-solution' ); ?></h3>
                             <p class="skyhshoso-sm-desc"><?php esc_html_e( 'Enter your API credentials to allow the dashboard to connect.', 'skyhs-hosting-solution' ); ?></p>
 
-                            <div class="skyhshoso-sm-row">
+                            <div class="skyhshoso-sm-row skyhshoso-sm-row-cols-2">
                                 <div class="skyhshoso-sm-field">
                                     <label id="label_sm_host" for="sm_host"><?php esc_html_e( 'Host / IP Address', 'skyhs-hosting-solution' ); ?> <span class="req">*</span></label>
                                     <input type="text" id="sm_host" name="host" class="sm-input" placeholder="<?php esc_attr_e( 'e.g., node1.example.com', 'skyhs-hosting-solution' ); ?>" />
-                                    <p class="sm-field-desc"><?php esc_html_e( 'Server hostname or IP.', 'skyhs-hosting-solution' ); ?></p>
+                                </div>
+                                <div class="skyhshoso-sm-field">
+                                    <label for="sm_port"><?php esc_html_e( 'API Port', 'skyhs-hosting-solution' ); ?> <span class="req">*</span></label>
+                                    <input type="text" id="sm_port" name="port" class="sm-input" value="2087" />
                                 </div>
                             </div>
 
@@ -208,7 +219,7 @@ class SkyHSHOSO_Server_Manager {
 
                         <div class="skyhshoso-sm-actions">
                             <div class="skyhshoso-sm-actions-left">
-                                <span id="sm-loader" class="spinner" style="float:none;margin:0;"></span>
+                                <span id="sm-loader" class="spinner" style="float:none;margin:0;display:none;"></span>
                                 <span id="sm-test-result" class="sm-test-result"></span>
                             </div>
                             <div class="skyhshoso-sm-actions-right">
@@ -242,6 +253,12 @@ class SkyHSHOSO_Server_Manager {
                         <div id="skyhshoso-sm-server-list" class="skyhshoso-sm-server-list">
                             <?php foreach ( $servers as $server ) :
                                 $type = get_post_meta( $server->ID, '_skyhshoso_server_type', true ) ?: 'whm';
+                                $port = get_post_meta( $server->ID, '_skyhshoso_server_port', true );
+                                
+                                if (empty($port)) {
+                                    $port = ($type === 'hestiacp') ? '8083' : (($type === 'wordops') ? '22' : '2087');
+                                }
+
                                 $plans = get_post_meta( $server->ID, '_skyhshoso_whm_default_package_names', true );
                                 $plans = is_array( $plans ) ? $plans : array();
                                 $last_error = get_post_meta( $server->ID, '_skyhshoso_whm_last_error', true );
@@ -266,7 +283,7 @@ class SkyHSHOSO_Server_Manager {
                                     <div class="sm-card-body">
                                         <div class="sm-card-detail">
                                             <span class="sm-detail-label"><?php esc_html_e( 'Host:', 'skyhs-hosting-solution' ); ?></span>
-                                            <span class="sm-detail-value"><?php echo esc_html( $host ?: '—' ); ?></span>
+                                            <span class="sm-detail-value"><?php echo esc_html( $host ?: '—' ); ?> : <strong><?php echo esc_html($port); ?></strong></span>
                                         </div>
                                         <div class="sm-card-detail">
                                             <span class="sm-detail-label"><?php esc_html_e( 'IP:', 'skyhs-hosting-solution' ); ?></span>
@@ -310,45 +327,259 @@ class SkyHSHOSO_Server_Manager {
 
         <script>
         jQuery(document).ready(function($) {
-            // Dynamic Label Swapping based on Server Type
+            'use strict';
+            var data = window.skyhshoso_sm || {};
+
+            $('#skyhshoso-sm-form').off('submit');
+            $(document).off('click', '.sm-edit-server');
+            $(document).off('click', '.sm-sync-server');
+            $('#sm-test-btn').off('click');
+
+            function showNotice(type, msg) {
+                var $n = $('#skyhshoso-sm-notice');
+                $n.removeClass('notice-success notice-error notice-info').addClass('notice-' + type).html('<p>' + msg + '</p>').show();
+                if (type === 'success') $n.delay(6000).fadeOut();
+            }
+
+            $(document).on('click', '.sm-edit-server', function() {
+                var id = $(this).data('id');
+                var server = null;
+                $.each(data.servers, function(i, s) {
+                    if (String(s.id) === String(id)) { server = s; return false; }
+                });
+
+                if (!server) return;
+
+                $('#sm_server_id').val(server.id);
+                $('#sm_name').val(server.name);
+                $('#sm_host').val(server.host);
+                $('#sm_port').val(server.port || '2087');
+                $('#sm_user').val(server.user);
+                $('#sm_token').val(server.token);
+                $('#sm_server_ip').val(server.server_ip || '');
+                
+                if (server.type) {
+                    $('#sm_type').val(server.type).trigger('change');
+                } else {
+                    $('#sm_type').val('whm').trigger('change');
+                }
+
+                if (server.nameservers && server.nameservers.length > 0) {
+                    $('.sm-ns-input').each(function(i) {
+                        $(this).val(server.nameservers[i] || '');
+                    });
+                }
+                $('#skyhshoso-sm-form-title').text('Edit Server');
+                $('#sm-submit').text('Update Server');
+                $('#skyhshoso-sm-form').data('edit-mode', '1');
+
+                if (server.plan_list && server.plan_list.length > 0) {
+                    var html = '<p><strong>Saved packages:</strong></p><div class="sm-plan-tags">';
+                    $.each(server.plan_list, function(i, pkg) {
+                        html += '<span class="sm-plan-tag">' + pkg.replace(/_/g, ' ') + '</span>';
+                    });
+                    html += '</div>';
+                    $('#sm-test-plans').html(html);
+                    $('#sm-test-status').html('<div class="notice notice-success inline"><p>Server has ' + server.plan_list.length + ' packages.</p></div>');
+                    $('#sm-test-results').show();
+                } else {
+                    $('#sm-test-results').hide();
+                }
+
+                $('html, body').animate({ scrollTop: $('#skyhshoso-sm-form').offset().top - 40 }, 400);
+            });
+
             $('#sm_type').on('change', function() {
                 var type = $(this).val();
+                var $port = $('#sm_port');
+                var currentPort = $port.val();
+
                 if (type === 'hestiacp') {
                     $('#label_sm_host').html('HestiaCP Host / IP <span class="req">*</span>');
                     $('#label_sm_user').html('HestiaCP Access Key ID <span class="req">*</span>');
                     $('#label_sm_token').html('HestiaCP Secret Key <span class="req">*</span>');
-                    $('#desc_sm_token').html('Generate from HestiaCP Admin -> Access Keys.');
                     $('#sm_user').attr('placeholder', 'e.g., admin_xxxxxx');
+                    if (currentPort === '2087' || currentPort === '22' || currentPort === '') $port.val('8083');
+
+                } else if (type === 'wordops') {
+                    $('#label_sm_host').html('WordOps Host / IP <span class="req">*</span>');
+                    $('#label_sm_user').html('SSH Username <span class="req">*</span>');
+                    $('#label_sm_token').html('SSH Key / Password <span class="req">*</span>');
+                    $('#sm_user').attr('placeholder', 'e.g., root');
+                    if (currentPort === '2087' || currentPort === '8083' || currentPort === '') $port.val('22');
+
                 } else {
                     $('#label_sm_host').html('WHM Host <span class="req">*</span>');
                     $('#label_sm_user').html('WHM Username <span class="req">*</span>');
                     $('#label_sm_token').html('WHM API Token <span class="req">*</span>');
-                    $('#desc_sm_token').html('Generate from WHM → API Tokens.');
                     $('#sm_user').attr('placeholder', 'e.g., root');
+                    if (currentPort === '8083' || currentPort === '22' || currentPort === '') $port.val('2087');
                 }
             });
 
-            // Hijack the "Edit Server" button to prepopulate the type dropdown properly!
-            $(document).on('click', '.sm-edit-server', function() {
-                var serverId = $(this).data('id');
-                // Find the server object in the JS array that was printed via wp_localize_script
-                var serverData = skyhshoso_sm.servers.find(s => s.id == serverId);
-                
-                if (serverData && serverData.type) {
-                    $('#sm_type').val(serverData.type).trigger('change');
-                } else {
-                    $('#sm_type').val('whm').trigger('change');
-                }
-            });
-            
-            // Run once on load to ensure defaults are set
             $('#sm_type').trigger('change');
+
+            $('#sm-test-btn').on('click', function(e) {
+                e.preventDefault();
+                var type = $('#sm_type').val(); 
+                var host = $('#sm_host').val().trim();
+                var port = $('#sm_port').val().trim(); 
+                var user = $('#sm_user').val().trim();
+                var token = $('#sm_token').val().trim();
+
+                if (!host || !user || !token) {
+                    $('#sm-test-result').text('Fill credentials first.').addClass('error');
+                    return;
+                }
+
+                var $btn = $(this);
+                var $result = $('#sm-test-result');
+                $btn.prop('disabled', true).text('Testing...');
+                $result.text(data.strings.testing).removeClass('success error');
+                $('#sm-loader').css('display', 'inline-block');
+                $('#sm-test-results').hide();
+
+                $.post(data.ajax_url, {
+                    action: 'skyhshoso_test_whm',
+                    nonce: data.nonce_test,
+                    server_type: type, 
+                    host: host,
+                    port: port, 
+                    user: user,
+                    token: token
+                }, function(resp) {
+                    if (resp.success) {
+                        $result.text(resp.data.message).addClass('success');
+                        var $plans = $('#sm-test-plans');
+                        $plans.empty();
+                        if (resp.data.plans && Object.keys(resp.data.plans).length > 0) {
+                            var html = '<p><strong>Packages found:</strong></p><div class="sm-plan-tags">';
+                            $.each(resp.data.plans, function(key, label) {
+                                html += '<span class="sm-plan-tag">' + label + '</span>';
+                            });
+                            html += '</div>';
+                            $plans.html(html);
+                        } else {
+                            $plans.html('<p>No packages with default feature list found.</p>');
+                        }
+                        $('#sm-test-results').show();
+                        $('#sm-test-status').html('<div class="notice notice-success inline"><p>' + resp.data.message + '</p></div>');
+                    } else {
+                        $result.text(resp.data.message || 'Connection failed.').addClass('error');
+                        $('#sm-test-results').show();
+                        $('#sm-test-status').html('<div class="notice notice-error inline"><p>' + (resp.data.message || 'Connection failed.') + '</p></div>');
+                        $('#sm-test-plans').empty();
+                    }
+                }).always(function() {
+                    $btn.prop('disabled', false).text('Test & Sync');
+                    $('#sm-loader').hide();
+                });
+            });
+
+            $(document).on('click', '.sm-sync-server', function() {
+                var id = $(this).data('id');
+                var $btn = $(this);
+                var server = null;
+                $.each(data.servers, function(i, s) {
+                    if (String(s.id) === String(id)) { server = s; return false; }
+                });
+
+                if (!server) return;
+                $btn.prop('disabled', true).text('Syncing...');
+
+                $.post(data.ajax_url, {
+                    action: 'skyhshoso_save_server',
+                    nonce: data.nonce_save,
+                    server_id: id,
+                    name: server.name,
+                    server_type: server.type, 
+                    host: server.host,
+                    port: server.port || '', 
+                    user: server.user,
+                    token: 'EXISTING_TOKEN_PLACEHOLDER', 
+                    server_ip: server.server_ip || '',
+                    nameservers: server.nameservers || []
+                }, function(resp) {
+                    if (resp.success) {
+                        showNotice('success', resp.data.message);
+                        setTimeout(function() { location.reload(); }, 1500);
+                    } else {
+                        showNotice('error', resp.data.message);
+                        $btn.prop('disabled', false).text('Sync');
+                    }
+                });
+            });
+
+            $('#skyhshoso-sm-form').on('submit', function(e) {
+                e.preventDefault();
+
+                var name = $('#sm_name').val().trim();
+                var type = $('#sm_type').val(); 
+                var host = $('#sm_host').val().trim();
+                var port = $('#sm_port').val().trim(); 
+                var user = $('#sm_user').val().trim();
+                var token = $('#sm_token').val().trim();
+                var serverIp = $('#sm_server_ip').val().trim();
+                var nameservers = [];
+                $('.sm-ns-input').each(function() {
+                    if ($(this).val().trim() !== '') {
+                        nameservers.push($(this).val().trim());
+                    }
+                });
+                var serverId = $('#sm_server_id').val();
+
+                var isEdit = $('#skyhshoso-sm-form').data('edit-mode') === '1';
+
+                if (!name || !host || !user) {
+                    showNotice('error', data.strings.fill_fields);
+                    return;
+                }
+
+                if (!isEdit && !token) {
+                    showNotice('error', data.strings.fill_fields);
+                    return;
+                }
+
+                if (isEdit && !token) {
+                    token = 'EXISTING_TOKEN_PLACEHOLDER';
+                }
+
+                var $btn = $('#sm-submit');
+                var $loader = $('#sm-loader'); 
+                $btn.prop('disabled', true).text('Saving...');
+                $loader.css('display', 'inline-block');
+                showNotice('info', data.strings.saving);
+
+                $.post(data.ajax_url, {
+                    action: 'skyhshoso_save_server',
+                    nonce: data.nonce_save,
+                    server_id: serverId,
+                    name: name,
+                    server_type: type, 
+                    host: host,
+                    port: port, 
+                    user: user,
+                    token: token,
+                    server_ip: serverIp,
+                    nameservers: nameservers
+                }, function(resp) {
+                    if (resp.success) {
+                        showNotice('success', resp.data.message);
+                        setTimeout(function() { location.reload(); }, 1500);
+                    } else {
+                        showNotice('error', resp.data.message);
+                    }
+                }).always(function() {
+                    $btn.prop('disabled', false).text('Save Server');
+                    $loader.hide();
+                });
+            });
         });
         </script>
         <?php
     }
 
-// -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
     // AJAX handlers
     // -------------------------------------------------------------------------
 
@@ -364,6 +595,7 @@ class SkyHSHOSO_Server_Manager {
         $name      = isset( $_POST['name'] ) ? sanitize_text_field( wp_unslash( $_POST['name'] ) ) : '';
         $type      = isset( $_POST['server_type'] ) ? sanitize_text_field( wp_unslash( $_POST['server_type'] ) ) : 'whm';
         $host      = isset( $_POST['host'] ) ? sanitize_text_field( wp_unslash( $_POST['host'] ) ) : '';
+        $port      = isset( $_POST['port'] ) ? sanitize_text_field( wp_unslash( $_POST['port'] ) ) : ''; 
         $user      = isset( $_POST['user'] ) ? sanitize_text_field( wp_unslash( $_POST['user'] ) ) : '';
         $token     = isset( $_POST['token'] ) ? sanitize_text_field( wp_unslash( $_POST['token'] ) ) : '';
         $server_ip = isset( $_POST['server_ip'] ) ? sanitize_text_field( wp_unslash( $_POST['server_ip'] ) ) : '';
@@ -371,6 +603,10 @@ class SkyHSHOSO_Server_Manager {
 
         if ( empty( $name ) || empty( $host ) || empty( $user ) ) {
             wp_send_json_error( array( 'message' => __( 'All fields are required.', 'skyhs-hosting-solution' ) ) );
+        }
+
+        if ( empty($port) ) {
+            $port = ($type === 'hestiacp') ? '8083' : (($type === 'wordops') ? '22' : '2087');
         }
 
         if ( $server_id ) {
@@ -389,8 +625,8 @@ class SkyHSHOSO_Server_Manager {
             }
         }
 
-        // Save server metadata
         update_post_meta( $server_id, '_skyhshoso_server_type', $type );
+        update_post_meta( $server_id, '_skyhshoso_server_port', $port );
         update_post_meta( $server_id, '_skyhshoso_whm_user_id', $user );
 
         if ( $token === 'EXISTING_TOKEN_PLACEHOLDER' || ( $server_id && empty( $token ) ) ) {
@@ -415,10 +651,8 @@ class SkyHSHOSO_Server_Manager {
             delete_post_meta( $server_id, '_skyhshoso_server_nameservers' );
         }
 
-        // 1. Unified Factory Package Sync!
         $this->sync_server_packages( $server_id );
 
-        // 2. WHM specific cPanel account cache sync (we will adapt this for Hestia later)
         if ( $type === 'whm' && class_exists( 'SkyHSHOSO_CPanel_Sync' ) ) {
             SkyHSHOSO_CPanel_Sync::instance()->sync_server_accounts( $server_id );
         }
@@ -458,33 +692,47 @@ class SkyHSHOSO_Server_Manager {
 
         $type  = isset( $_POST['server_type'] ) ? sanitize_text_field( wp_unslash( $_POST['server_type'] ) ) : 'whm';
         $host  = isset( $_POST['host'] ) ? sanitize_text_field( wp_unslash( $_POST['host'] ) ) : '';
+        $port  = isset( $_POST['port'] ) ? sanitize_text_field( wp_unslash( $_POST['port'] ) ) : '';
         $user  = isset( $_POST['user'] ) ? sanitize_text_field( wp_unslash( $_POST['user'] ) ) : '';
         $token = isset( $_POST['token'] ) ? sanitize_text_field( wp_unslash( $_POST['token'] ) ) : '';
+
+        if ( empty($port) ) {
+            $port = ($type === 'hestiacp') ? '8083' : (($type === 'wordops') ? '22' : '2087');
+        }
 
         if ( empty( $host ) || empty( $user ) || empty( $token ) ) {
             wp_send_json_error( array( 'message' => __( 'Fill credentials first.', 'skyhs-hosting-solution' ) ) );
         }
 
-        // Initialize the correct Driver manually for the connection test
-        if ( $type === 'hestiacp' ) {
-            $driver = new SkyHSHOSO_HestiaCP_Driver($host, $user, $token);
-        } else {
-            $driver = new SkyHSHOSO_WHM_Driver($host, $user, $token);
+        if (!class_exists('SkyHSHOSO_Provider_Factory')) {
+            require_once dirname(__FILE__) . '/class-hosting-provider-factory.php';
         }
 
-        // 1. Test Connection
+        if ( $type === 'hestiacp' ) {
+            if (!class_exists('SkyHSHOSO_HestiaCP_Driver')) {
+                require_once dirname(__FILE__) . '/drivers/class-hestiacp-driver.php';
+            }
+            $driver = new SkyHSHOSO_HestiaCP_Driver($host, $user, $token, $port);
+        } elseif ( $type === 'wordops' ) {
+            wp_send_json_error( array( 'message' => 'WordOps driver is currently under development.' ) );
+            return;
+        } else {
+            if (!class_exists('SkyHSHOSO_WHM_Driver')) {
+                require_once dirname(__FILE__) . '/drivers/class-whm-driver.php';
+            }
+            $driver = new SkyHSHOSO_WHM_Driver($host, $user, $token, $port);
+        }
+
         $test = $driver->test_connection();
         if ( is_wp_error( $test ) ) {
             wp_send_json_error( array( 'message' => $test->get_error_message() ) );
         }
 
-        // 2. Fetch Packages
         $packages = $driver->get_packages();
         if ( is_wp_error( $packages ) ) {
             wp_send_json_error( array( 'message' => $packages->get_error_message() ) );
         }
 
-        // 3. Format Packages for the UI Dropdown
         $formatted = array();
         foreach ( $packages as $pkg ) {
             $formatted[ $pkg ] = ucwords( str_replace( '_', ' ', $pkg ) );
@@ -497,6 +745,10 @@ class SkyHSHOSO_Server_Manager {
     }
 
     private function sync_server_packages( $server_id ) {
+        if (!class_exists('SkyHSHOSO_Provider_Factory')) {
+            require_once dirname(__FILE__) . '/class-hosting-provider-factory.php';
+        }
+        
         $driver = SkyHSHOSO_Provider_Factory::get_driver($server_id);
         
         if ( is_wp_error($driver) ) {
@@ -508,7 +760,6 @@ class SkyHSHOSO_Server_Manager {
         update_post_meta( $server_id, '_skyhshoso_whm_last_sync_time', current_time( 'mysql' ) );
 
         if ( ! is_wp_error($packages) && is_array($packages) ) {
-            // By using the original WHM meta key, the WooCommerce products editor will automatically list HestiaCP packages perfectly!
             update_post_meta( $server_id, '_skyhshoso_whm_default_package_names', $packages );
             delete_post_meta( $server_id, '_skyhshoso_whm_last_error' );
         } else {

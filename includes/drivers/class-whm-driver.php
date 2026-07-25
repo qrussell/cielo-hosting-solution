@@ -8,12 +8,16 @@ class SkyHSHOSO_WHM_Driver implements SkyHSHOSO_Hosting_Driver_Interface {
     private $host;
     private $user;
     private $token;
+    private $port; // NEW: Declare port property
     private $whm_host_domain;
 
-    public function __construct($host, $user, $token) {
+    // FIX: Added $port = 2087 to the constructor signature
+    public function __construct($host, $user, $token, $port = 2087) {
         $this->host = $host;
         $this->user = $user;
         $this->token = $token;
+        $this->port = $port; // Save the port!
+        
         // Clean the host to just the domain/IP
         $this->whm_host_domain = preg_replace('/:\d+$/', '', parse_url($host, PHP_URL_HOST) ?: $host);
     }
@@ -23,7 +27,9 @@ class SkyHSHOSO_WHM_Driver implements SkyHSHOSO_Hosting_Driver_Interface {
      */
     private function whm_api_request($endpoint, $params = []) {
         $query = http_build_query($params);
-        $url = "https://{$this->whm_host_domain}:2087/json-api/{$endpoint}?api.version=1&{$query}";
+        
+        // FIX: Inject the custom Port here dynamically
+        $url = "https://{$this->whm_host_domain}:{$this->port}/json-api/{$endpoint}?api.version=1&{$query}";
 
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
@@ -115,7 +121,7 @@ class SkyHSHOSO_WHM_Driver implements SkyHSHOSO_Hosting_Driver_Interface {
         return new WP_Error('whm_error', 'Failed to generate SSO session link.');
     }
 
-// --- 5. PROVISIONING & UPGRADES ---
+    // --- 5. PROVISIONING & UPGRADES ---
     public function create_account($domain, $username, $password, $email, $package_name) {
         $res = $this->whm_api_request('createacct', [
             'domain' => $domain,
@@ -142,5 +148,57 @@ class SkyHSHOSO_WHM_Driver implements SkyHSHOSO_Hosting_Driver_Interface {
         }
         return new WP_Error('whm_error', $res['metadata']['reason'] ?? 'Failed to upgrade WHM package.');
     }
-    public function scan_for_wordpress($username, $domain_doc_roots) { return true; }
+
+    // --- 6. PACKAGES ---
+    public function get_packages() {
+        $res = $this->whm_api_request('listpkgs');
+        
+        if (isset($res['data']['pkg']) && is_array($res['data']['pkg'])) {
+            $packages = [];
+            foreach ($res['data']['pkg'] as $pkg) {
+                if ( isset( $pkg['FEATURELIST'] ) && 'default' === $pkg['FEATURELIST'] ) {
+                    $packages[] = $pkg['name'];
+                }
+            }
+            return $packages;
+        }
+        return new WP_Error('whm_error', $res['metadata']['reason'] ?? 'Failed to fetch WHM packages.');
+    }
+
+    // --- 7. WORDPRESS SYNC (FLEET DISCOVERY) ---
+    public function scan_for_wordpress($username = 'root', $domain_doc_roots = array()) {
+        $all_sites = [];
+
+        // If a specific username is passed, we can filter for just their domains.
+        // Otherwise, we fetch every domain on the entire server.
+        $params = [];
+        if (!empty($username) && $username !== 'root') {
+            $params['user'] = $username;
+        }
+
+        // get_domain_info is incredibly fast and requires no file-system scanning.
+        $res = $this->whm_api_request('get_domain_info', $params);
+
+        if (isset($res['data']['domains']) && is_array($res['data']['domains'])) {
+            foreach ($res['data']['domains'] as $domain_data) {
+                
+                // We only care about primary and addon domains (skip parked/subdomains)
+                if (in_array($domain_data['domain_type'], ['main', 'addon'])) {
+                    
+                    $all_sites[] = [
+                        'domain'     => $domain_data['domain'],
+                        'websiteUrl' => 'https://' . $domain_data['domain'],
+                        'ownerName'  => $domain_data['user'],
+                        'docroot'    => $domain_data['docroot']
+                    ];
+                    
+                }
+            }
+        } else {
+            // Log the error if the API failed to respond properly
+            error_log('SkyHS WHM Sync Error: Failed to fetch get_domain_info -> ' . wp_json_encode($res));
+        }
+
+        return $all_sites;
+    }
 }

@@ -231,7 +231,8 @@ class SkyHSHOSO_Hosting_Manager {
                             </button>
                         </div>
                         <div class="skyhshoso-hm-controls" style="display:flex;gap:10px;margin-bottom:15px;flex-wrap:wrap;">
-                            <input type="text" id="hm-search-input" class="hm-control-input" placeholder="<?php esc_attr_e( 'Search title, domain, email...', 'skyhs-hosting-solution' ); ?>" style="flex:1;min-width:200px;" />
+							<?php $auto_search = isset($_GET['search_host']) ? sanitize_text_field($_GET['search_host']) : ''; ?>
+							<input type="text" id="hm-search-input" class="hm-control-input" value="<?php echo esc_attr($auto_search); ?>" placeholder="<?php esc_attr_e( 'Search title, domain, email...', 'skyhs-hosting-solution' ); ?>" style="flex:1;min-width:200px;" />
                             <select id="hm-status-filter" class="hm-control-select" style="min-width:180px;">
                                 <option value=""><?php esc_html_e( 'All Billing Statuses', 'skyhs-hosting-solution' ); ?></option>
                                 <option value="active"><?php esc_html_e( 'Active', 'skyhs-hosting-solution' ); ?></option>
@@ -253,6 +254,16 @@ class SkyHSHOSO_Hosting_Manager {
                     </div>
                 </div>
             </div>
+			<?php if ( ! empty( $auto_search ) ) : ?>
+            <script>
+                jQuery(document).ready(function($) {
+                    // Give the SPA a half-second to load the initial list, then auto-filter it!
+                    setTimeout(function() {
+                        $('#hm-search-input').trigger('keyup').trigger('input');
+                    }, 600); 
+                });
+            </script>
+            <?php endif; ?>
         </div>
         <?php
     }
@@ -597,15 +608,16 @@ class SkyHSHOSO_Hosting_Manager {
         $where = array( "p.post_type = 'skyhshoso_hosting'", "p.post_status IN ('publish', 'draft', 'pending')" );
         $join = "";
 
-        // Search filter (Matches hosting title, mapped domain, owner email, user login or display name)
+        // --- NEW FIX: Search now includes the cPanel Username! ---
         if ( ! empty( $search ) ) {
             $search_like = '%' . $wpdb->esc_like( $search ) . '%';
             $join .= " LEFT JOIN {$table_users} u ON p.post_author = u.ID ";
             $join .= " LEFT JOIN {$table_postmeta} pm_domain ON (p.ID = pm_domain.post_id AND pm_domain.meta_key = 'skyhshoso_hosting_domain') ";
+            $join .= " LEFT JOIN {$table_postmeta} pm_cpanel ON (p.ID = pm_cpanel.post_id AND pm_cpanel.meta_key = 'skyhshoso_hosting_username') ";
 
             $where[] = $wpdb->prepare(
-                "(p.post_title LIKE %s OR pm_domain.meta_value LIKE %s OR u.user_email LIKE %s OR u.display_name LIKE %s OR u.user_login LIKE %s)",
-                $search_like, $search_like, $search_like, $search_like, $search_like
+                "(p.post_title LIKE %s OR pm_domain.meta_value LIKE %s OR pm_cpanel.meta_value LIKE %s OR u.user_email LIKE %s OR u.display_name LIKE %s OR u.user_login LIKE %s)",
+                $search_like, $search_like, $search_like, $search_like, $search_like, $search_like
             );
         }
 
@@ -625,9 +637,9 @@ class SkyHSHOSO_Hosting_Manager {
         $join_sql = $join;
 
         // Fetch counts
-		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
         $total_records = $wpdb->get_var( "SELECT COUNT(DISTINCT p.ID) FROM {$table_posts} p {$join_sql} WHERE {$where_sql}" );
-		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
 
         $limit = isset( $_POST['limit'] ) ? intval( $_POST['limit'] ) : 10;
         $page = isset( $_POST['paged'] ) ? intval( $_POST['paged'] ) : 1;
@@ -641,10 +653,10 @@ class SkyHSHOSO_Hosting_Manager {
         }
 
         // Fetch results
-		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
         $query_sql = "SELECT DISTINCT p.* FROM {$table_posts} p {$join_sql} WHERE {$where_sql} ORDER BY p.post_date DESC LIMIT %d OFFSET %d";
         $results = $wpdb->get_results( $wpdb->prepare( $query_sql, $limit, $offset ) );
-		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
         $hosting_list = array();
 
         foreach ( $results as $row ) {

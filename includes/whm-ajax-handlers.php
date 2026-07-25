@@ -632,6 +632,76 @@ function skyhshoso_ajax_check_wp_target() {
     wp_send_json_success(['is_wp' => false]);
 }
 
+// 1. Returns list of servers to the JS loop
+add_action('wp_ajax_skyhshoso_get_servers_for_sync', 'skyhshoso_get_servers_for_sync_callback');
+function skyhshoso_get_servers_for_sync_callback() {
+    if (!current_user_can('manage_options')) wp_send_json_error('Unauthorized');
+    
+    $servers = get_posts(['post_type' => 'skyhshoso_server', 'posts_per_page' => -1]);
+    $server_list = [];
+    foreach ($servers as $s) {
+        $server_list[] = ['id' => $s->ID, 'name' => $s->post_title];
+    }
+    wp_send_json_success(['servers' => $server_list]);
+}
+
+// 2. Processes a single server and saves sites to DB
+add_action('wp_ajax_skyhshoso_sync_single_server_wpsites', 'skyhshoso_sync_single_server_wpsites_callback');
+function skyhshoso_sync_single_server_wpsites_callback() {
+    if (!current_user_can('manage_options')) wp_send_json_error('Unauthorized');
+
+    $server_id = absint($_POST['server_id']);
+    $driver = SkyHSHOSO_Provider_Factory::get_driver($server_id);
+    
+    if (is_wp_error($driver)) wp_send_json_error($driver->get_error_message());
+
+    // Calls the paginated driver function
+    $sites = $driver->scan_for_wordpress(); 
+    if (is_wp_error($sites)) wp_send_json_error($sites->get_error_message());
+
+    $imported_count = 0;
+
+    foreach ($sites as $site) {
+        // Normalize the payload between WHM (WP Toolkit) and HestiaCP response schemas
+        $site_url = isset($site['websiteUrl']) ? $site['websiteUrl'] : (isset($site['domain']) ? 'https://' . $site['domain'] : '');
+        $cpanel_user = isset($site['ownerName']) ? $site['ownerName'] : (isset($site['username']) ? $site['username'] : 'unknown');
+
+        if (empty($site_url)) continue;
+
+        $clean_url = untrailingslashit(str_replace(['http://', 'https://'], '', $site_url));
+
+        // Check if this site already exists in our WordPress DB
+        $existing = get_posts([
+            'post_type'  => 'skyhshoso_wp_site',
+            'meta_query' => [
+                'relation' => 'OR',
+                ['key' => '_skyhshoso_wp_site_url', 'value' => $site_url, 'compare' => '='],
+                ['key' => 'skyhshoso_wp_domain', 'value' => $clean_url, 'compare' => '=']
+            ],
+            'fields'     => 'ids'
+        ]);
+
+        if (empty($existing)) {
+            // New, discovered site! Add it to the DB.
+            $post_id = wp_insert_post([
+                'post_type'   => 'skyhshoso_wp_site',
+                'post_title'  => $clean_url,
+                'post_status' => 'publish'
+            ]);
+
+            update_post_meta($post_id, 'skyhshoso_server_id', $server_id);
+            update_post_meta($post_id, 'skyhshoso_wp_cpanel_user', $cpanel_user);
+            update_post_meta($post_id, '_skyhshoso_wp_site_url', $site_url);
+            update_post_meta($post_id, 'skyhshoso_wp_domain', $clean_url);
+            update_post_meta($post_id, '_skyhshoso_is_discovered', 'yes'); // Flags as Unmanaged
+
+            $imported_count++;
+        }
+    }
+
+    wp_send_json_success(['imported' => $imported_count]);
+}
+
 /**
  * =========================================================================
  * UNIVERSAL SSO INJECTOR
@@ -1460,4 +1530,58 @@ function skyhshoso_update_external_cpanel_callback() {
     update_post_meta($hosting_id, '_external_cpanel_api_token', $api_token);
 
     wp_send_json_success(['message' => 'Credentials updated successfully.']);
+}
+/**
+ * AJAX: Live On-Demand Scan of a single server's WP Sites
+ */
+add_action('wp_ajax_skyhshoso_scan_server_sites', 'skyhshoso_scan_server_sites_callback');
+function skyhshoso_scan_server_sites_callback() {
+    if ( ! current_user_can( 'manage_options' ) ) {
+        wp_send_json_error( array( 'message' => __( 'Permission denied.', 'skyhs-hosting-solution' ) ) );
+    }
+
+    $server_id = isset( $_POST['server_id'] ) ? intval( $_POST['server_id'] ) : 0;
+    if ( ! $server_id ) {
+        wp_send_json_error( array( 'message' => __( 'Invalid server.', 'skyhs-hosting-solution' ) ) );
+    }
+
+    // 1. Determine Server Type for labeling
+    $server_type = get_post_meta($server_id, '_skyhshoso_server_type', true) ?: 'whm';
+    $account_type_label = ($server_type === 'hestiacp') ? 'HestiaCP' : 'cPanel';
+
+    // 2. Load the Factory Driver
+    $driver = SkyHSHOSO_Provider_Factory::get_driver($server_id);
+    if (is_wp_error($driver)) {
+        wp_send_json_error( array( 'message' => $driver->get_error_message() ) );
+    }
+
+    // 3. Scan the Server Live
+    $sites = $driver->scan_for_wordpress();
+    if (is_wp_error($sites)) {
+        wp_send_json_error( array( 'message' => $sites->get_error_message() ) );
+    }
+
+    // 4. Format the output for the UI
+    $formatted_sites = array();
+    foreach ($sites as $site) {
+        $domain = isset($site['websiteUrl']) ? $site['websiteUrl'] : (isset($site['domain']) ? 'https://' . $site['domain'] : 'Unknown');
+        $account = isset($site['ownerName']) ? $site['ownerName'] : (isset($site['username']) ? $site['username'] : 'Unknown');
+        
+        $formatted_sites[] = array(
+            'domain'  => str_replace(['http://', 'https://'], '', $domain),
+            'url'     => $domain,
+            'account' => $account,
+            'type'    => $account_type_label
+        );
+    }
+
+    // Sort alphabetically by account name to make it easy to read
+    usort($formatted_sites, function($a, $b) {
+        return strcmp($a['account'], $b['account']);
+    });
+
+    wp_send_json_success( array( 
+        'message' => 'Scan complete', 
+        'sites' => $formatted_sites 
+    ) );
 }

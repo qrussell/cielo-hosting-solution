@@ -936,3 +936,216 @@ function skyhshoso_cleanup_orphaned_wpsites($post_id) {
         }
     }
 }
+
+// 1. Add Columns to the WP Sites Admin Table
+add_filter('manage_skyhshoso_wp_site_posts_columns', 'skyhshoso_set_custom_wp_site_columns');
+function skyhshoso_set_custom_wp_site_columns($columns) {
+    $new_columns = array();
+    foreach($columns as $key => $title) {
+        if ($key == 'date') {
+            $new_columns['cpanel_user'] = __('cPanel Account', 'skyhs-hosting-solution');
+            $new_columns['server_name'] = __('Server', 'skyhs-hosting-solution');
+            $new_columns['managed_status'] = __('Billing Status', 'skyhs-hosting-solution');
+        }
+        $new_columns[$key] = $title;
+    }
+    return $new_columns;
+}
+
+// 2. Populate the Columns
+add_action('manage_skyhshoso_wp_site_posts_custom_column', 'skyhshoso_custom_wp_site_column_data', 10, 2);
+function skyhshoso_custom_wp_site_column_data($column, $post_id) {
+    if ($column === 'cpanel_user') {
+        $user = get_post_meta($post_id, 'skyhshoso_wp_cpanel_user', true);
+        echo !empty($user) ? esc_html($user) : '<em>Unknown</em>';
+    }
+    if ($column === 'server_name') {
+        $server_id = get_post_meta($post_id, 'skyhshoso_server_id', true);
+        echo $server_id ? esc_html(get_the_title($server_id)) : '<em>Unassigned</em>';
+    }
+    if ($column === 'managed_status') {
+        $sub_id = get_post_meta($post_id, 'skyhshoso_subscription_id', true);
+        if ($sub_id) {
+            echo '<span style="color:green; font-weight:bold;">Managed (Sub #'.esc_html($sub_id).')</span>';
+        } else {
+            echo '<span style="color:#d63638; font-weight:bold;">Unmanaged (Discovered)</span>';
+        }
+    }
+}
+
+// 3. Add the Safe JS "Fleet Sync" Button
+add_action('manage_posts_extra_tablenav', 'skyhshoso_add_sync_button_to_wp_sites');
+function skyhshoso_add_sync_button_to_wp_sites($view) {
+    global $typenow;
+    if ($typenow == 'skyhshoso_wp_site' && $view === 'top') {
+        ?>
+        <div class="alignleft actions">
+            <button type="button" id="skyhshoso-fleet-sync-btn" class="button button-primary">Discover WP Sites</button>
+            <span id="skyhshoso-fleet-sync-status" style="margin-left:10px; font-weight:600;"></span>
+        </div>
+        <script>
+        jQuery(document).ready(function($) {
+            $('#skyhshoso-fleet-sync-btn').on('click', function(e) {
+                e.preventDefault();
+                var $btn = $(this);
+                var $status = $('#skyhshoso-fleet-sync-status');
+                
+                $btn.prop('disabled', true);
+                $status.text('Fetching server list...').css('color', '#2271b1');
+
+                // Get Servers
+                $.post(ajaxurl, { action: 'skyhshoso_get_servers_for_sync' }, function(response) {
+                    if (!response.success || response.data.servers.length === 0) {
+                        $status.text('Failed to load servers.').css('color', '#d63638');
+                        $btn.prop('disabled', false);
+                        return;
+                    }
+                    
+                    var servers = response.data.servers;
+                    var currentIndex = 0;
+                    var totalDiscovered = 0;
+
+                    // Loop through servers sequentially to prevent PHP timeouts!
+                    function syncNextServer() {
+                        if (currentIndex >= servers.length) {
+                            $status.text('Sync Complete! Discovered ' + totalDiscovered + ' new sites. Refreshing...').css('color', '#00a32a');
+                            setTimeout(function(){ location.reload(); }, 1500);
+                            return;
+                        }
+
+                        var server = servers[currentIndex];
+                        $status.text('Syncing server: ' + server.name + ' (' + (currentIndex + 1) + '/' + servers.length + ')...');
+
+                        $.post(ajaxurl, { 
+                            action: 'skyhshoso_sync_single_server_wpsites', 
+                            server_id: server.id 
+                        }, function(res) {
+                            if (res.success) totalDiscovered += res.data.imported;
+                            currentIndex++;
+                            syncNextServer(); 
+                        }).fail(function() {
+                            currentIndex++;
+                            syncNextServer(); 
+                        });
+                    }
+
+                    syncNextServer(); // Start the loop
+                });
+            });
+        });
+        </script>
+        <?php
+    }
+}
+/**
+ * =========================================================================
+ * LIVE FLEET DASHBOARD (WP SITES PAGE OVERRIDE)
+ * =========================================================================
+ * Transforms the flat WP Sites database table into a live, server-grouped UI.
+ */
+add_action('admin_footer-edit.php', 'skyhshoso_transform_wp_sites_page');
+
+function skyhshoso_transform_wp_sites_page() {
+    global $typenow;
+    
+    // Only run this on the WP Sites admin menu
+    if ($typenow !== 'skyhshoso_wp_site') {
+        return;
+    }
+
+    // Grab all servers to hand off to our Javascript loop
+    $servers = get_posts(['post_type' => 'skyhshoso_server', 'posts_per_page' => -1, 'order' => 'ASC', 'orderby' => 'title']);
+    $server_data = [];
+    foreach ($servers as $s) {
+        $server_data[] = [
+            'id' => $s->ID, 
+            'name' => $s->post_title, 
+            'type' => get_post_meta($s->ID, '_skyhshoso_server_type', true) ?: 'whm'
+        ];
+    }
+    ?>
+    <style>
+        /* Hide the native WordPress list table and filters */
+        .wp-list-table, .tablenav, .search-box, .subsubsub { display: none !important; }
+        
+        /* Custom Fleet UI Styling */
+        #skyhs-fleet-dashboard { margin-top: 20px; max-width: 1200px; }
+        .skyhs-fleet-server { border: 1px solid #ccd0d4; background: #fff; margin-bottom: 20px; border-radius: 4px; box-shadow: 0 1px 1px rgba(0,0,0,.04); overflow: hidden; }
+        .skyhs-fleet-server-header { background: #f6f7f7; padding: 15px 20px; border-bottom: 1px solid #ccd0d4; display: flex; justify-content: space-between; align-items: center; }
+        .skyhs-fleet-server-header h2 { margin: 0; font-size: 16px; color: #1d2327; }
+        .skyhs-fleet-server-body { padding: 10px 20px 20px 20px; }
+        
+        .skyhs-fleet-account-group { margin-top: 15px; border: 1px solid #e2e4e7; border-left: 4px solid #2271b1; padding: 0; border-radius: 3px; background: #fafafa;}
+        .skyhs-fleet-account-header { padding: 10px 15px; border-bottom: 1px solid #e2e4e7; background: #fff; }
+        .skyhs-fleet-account-header h3 { margin: 0; font-size: 14px; color: #1d2327; }
+        
+        .skyhs-fleet-site-list { list-style: none; margin: 0; padding: 0; }
+        .skyhs-fleet-site-list li { padding: 10px 15px; border-bottom: 1px dashed #e2e4e7; display: flex; align-items: center; gap: 8px;}
+        .skyhs-fleet-site-list li:last-child { border-bottom: none; }
+        .skyhs-fleet-site-list a { text-decoration: none; font-weight: 600; font-size: 13px; }
+    </style>
+
+    <script>
+    jQuery(document).ready(function($) {
+        var servers = <?php echo json_encode($server_data); ?>;
+        var container = $('<div id="skyhs-fleet-dashboard"></div>').insertAfter('.wrap h1');
+        
+        // 1. Build the loading boxes for each server instantly
+        servers.forEach(function(server) {
+            var sType = server.type === 'hestiacp' ? 'HestiaCP' : 'WHM';
+            var html = '<div class="skyhs-fleet-server" id="fleet-server-'+server.id+'">';
+            html += '<div class="skyhs-fleet-server-header"><h2><span class="dashicons dashicons-networking"></span> ' + server.name + '</h2><span style="font-size:11px; background:#e2e8f0; padding:3px 8px; border-radius:4px; font-weight:600;">' + sType + '</span></div>';
+            html += '<div class="skyhs-fleet-server-body"><span class="spinner is-active" style="float:none; margin:0 5px 0 0;"></span> Scanning live server...</div>';
+            html += '</div>';
+            container.append(html);
+
+            // 2. Fire asynchronous scans to the handler we built earlier
+            $.post(ajaxurl, { action: 'skyhshoso_scan_server_sites', server_id: server.id }, function(res) {
+                var bodyDiv = $('#fleet-server-'+server.id+' .skyhs-fleet-server-body');
+                
+                if (!res.success) {
+                    bodyDiv.html('<p style="color:#d63638;"><strong>Connection Error:</strong> ' + res.data.message + '</p>');
+                    return;
+                }
+
+                if (res.data.sites.length === 0) {
+                    bodyDiv.html('<p style="color:#646970;">No WordPress sites found on this server.</p>');
+                    return;
+                }
+
+                // 3. Group the flat site list into specific cPanel/Hestia Accounts
+                var accounts = {};
+                res.data.sites.forEach(function(site) {
+                    if (!accounts[site.account]) {
+                        accounts[site.account] = { type: site.type, sites: [] };
+                    }
+                    accounts[site.account].sites.push(site);
+                });
+
+                // 4. Render the grouped HTML
+                var renderHtml = '';
+                for (var acc in accounts) {
+                    renderHtml += '<div class="skyhs-fleet-account-group">';
+                    renderHtml += '<div class="skyhs-fleet-account-header"><h3>Account: <code>' + acc + '</code> <span style="font-size:10px; color:#646970; text-transform:uppercase; margin-left:5px;">(' + accounts[acc].type + ')</span></h3></div>';
+                    renderHtml += '<ul class="skyhs-fleet-site-list">';
+                    
+                    accounts[acc].sites.forEach(function(s) {
+                        renderHtml += '<li><span class="dashicons dashicons-wordpress" style="color:#2271b1;"></span> <a href="'+s.url+'" target="_blank">' + s.domain + '</a></li>';
+                    });
+                    
+                    renderHtml += '</ul></div>';
+                }
+                bodyDiv.html(renderHtml);
+                
+            }).fail(function() {
+                $('#fleet-server-'+server.id+' .skyhs-fleet-server-body').html('<p style="color:#d63638;">Server Unreachable.</p>');
+            });
+        });
+
+        if (servers.length === 0) {
+            container.html('<div class="notice notice-warning inline"><p>No servers configured. Add a server in the Server Manager first.</p></div>');
+        }
+    });
+    </script>
+    <?php
+}

@@ -19,7 +19,6 @@ jQuery(document).ready(function($) {
     $(document).on('click', '.sm-edit-server', function() {
         var id = $(this).data('id');
 
-        // Find server in local data
         var server = null;
         $.each(data.servers, function(i, s) {
             if (String(s.id) === String(id)) { server = s; return false; }
@@ -27,12 +26,14 @@ jQuery(document).ready(function($) {
 
         if (!server) {
             var $card = $(this).closest('.skyhshoso-sm-server-card');
-            var name = $card.find('h3').text().trim();
+            var name = $card.find('h3').text().replace(/whm|hestiacp|wordops/gi, '').trim(); 
             $('#sm_server_id').val(id);
             $('#sm_name').val(name);
             $('#sm_host').val(server ? server.host : '');
+            $('#sm_port').val('2087'); // NEW Default
             $('#sm_user').val(server ? server.user : '');
             $('#sm_token').val('').prop('placeholder', 'Leave blank to keep existing');
+            $('#sm_type').val('whm').trigger('change');
             $('#skyhshoso-sm-form-title').text('Edit Server');
             $('#sm-submit').text('Update Server');
             $('#skyhshoso-sm-form').data('edit-mode', '1');
@@ -43,9 +44,17 @@ jQuery(document).ready(function($) {
         $('#sm_server_id').val(server.id);
         $('#sm_name').val(server.name);
         $('#sm_host').val(server.host);
+        $('#sm_port').val(server.port || '2087'); // POPULATE PORT
         $('#sm_user').val(server.user);
         $('#sm_token').val(server.token);
         $('#sm_server_ip').val(server.server_ip || '');
+        
+        if (server.type) {
+            $('#sm_type').val(server.type).trigger('change');
+        } else {
+            $('#sm_type').val('whm').trigger('change');
+        }
+
         if (server.nameservers && server.nameservers.length > 0) {
             $('.sm-ns-input').each(function(i) {
                 $(this).val(server.nameservers[i] || '');
@@ -55,7 +64,6 @@ jQuery(document).ready(function($) {
         $('#sm-submit').text('Update Server');
         $('#skyhshoso-sm-form').data('edit-mode', '1');
 
-        // Show saved plans in test results area
         if (server.plan_list && server.plan_list.length > 0) {
             var html = '<p><strong>Saved packages:</strong></p><div class="sm-plan-tags">';
             $.each(server.plan_list, function(i, pkg) {
@@ -80,6 +88,8 @@ jQuery(document).ready(function($) {
         $('#skyhshoso-sm-form')[0].reset();
         $('#sm_server_id').val('0');
         $('#sm_token').prop('placeholder', '');
+        $('#sm_port').val('2087'); // RESET PORT
+        $('#sm_type').val('whm').trigger('change');
         $('#skyhshoso-sm-form-title').text('Add New Server');
         $('#sm-submit').text('Save Server');
         $('#skyhshoso-sm-form').data('edit-mode', '0');
@@ -89,40 +99,82 @@ jQuery(document).ready(function($) {
         $('#sm-test-result').text('').removeClass('success error');
     }
 
-    // "Add New" button in header (if we add one later)
     $(document).on('click', '.sm-add-new', resetForm);
 
     // -------------------------------------------------------------------------
-    // Test & Sync WHM connection
+    // Dynamic Form UI Logic
     // -------------------------------------------------------------------------
 
-    $('#sm-test-btn').on('click', function() {
+    // Dynamic Label Swapping and Port Defaulting based on Server Type
+    $('#sm_type').on('change', function() {
+        var type = $(this).val();
+        var $port = $('#sm_port');
+        var currentPort = $port.val();
+
+        if (type === 'hestiacp') {
+            $('#label_sm_host').html('HestiaCP Host / IP <span class="req">*</span>');
+            $('#label_sm_user').html('HestiaCP Access Key ID <span class="req">*</span>');
+            $('#label_sm_token').html('HestiaCP Secret Key <span class="req">*</span>');
+            $('#sm_user').attr('placeholder', 'e.g., admin_xxxxxx');
+            // Auto swap to default 8083 IF they hadn't custom configured it to something else (like 443)
+            if (currentPort === '2087' || currentPort === '22' || currentPort === '') $port.val('8083');
+
+        } else if (type === 'wordops') {
+            $('#label_sm_host').html('WordOps Host / IP <span class="req">*</span>');
+            $('#label_sm_user').html('SSH Username <span class="req">*</span>');
+            $('#label_sm_token').html('SSH Key / Password <span class="req">*</span>');
+            $('#sm_user').attr('placeholder', 'e.g., root');
+            if (currentPort === '2087' || currentPort === '8083' || currentPort === '') $port.val('22');
+
+        } else {
+            $('#label_sm_host').html('WHM Host <span class="req">*</span>');
+            $('#label_sm_user').html('WHM Username <span class="req">*</span>');
+            $('#label_sm_token').html('WHM API Token <span class="req">*</span>');
+            $('#sm_user').attr('placeholder', 'e.g., root');
+            if (currentPort === '8083' || currentPort === '22' || currentPort === '') $port.val('2087');
+        }
+    });
+
+    // Run once on load to ensure defaults are set
+    $('#sm_type').trigger('change');
+
+
+    // -------------------------------------------------------------------------
+    // Test & Sync connection
+    // -------------------------------------------------------------------------
+    
+    // FIXED: Changed from #cielo-test-btn to #sm-test-btn
+    $('#sm-test-btn').on('click', function(e) {
+        e.preventDefault();
+        var type = $('#sm_type').val(); 
         var host = $('#sm_host').val().trim();
+        var port = $('#sm_port').val().trim(); // GRAB PORT
         var user = $('#sm_user').val().trim();
         var token = $('#sm_token').val().trim();
 
         if (!host || !user || !token) {
-            $('#sm-test-result').text('Fill WHM credentials first.').addClass('error');
+            $('#sm-test-result').text('Fill credentials first.').addClass('error');
             return;
         }
 
         var $btn = $(this);
         var $result = $('#sm-test-result');
-        $btn.prop('disabled', true);
+        $btn.prop('disabled', true).text('Testing...');
         $result.text(data.strings.testing).removeClass('success error');
-        $('#sm-loader').addClass('is-active');
+        $('#sm-loader').addClass('is-active'); // Reverted to sm-loader
         $('#sm-test-results').hide();
 
         $.post(data.ajax_url, {
             action: 'skyhshoso_test_whm',
             nonce: data.nonce_test,
+            server_type: type, 
             host: host,
+            port: port, // SEND PORT
             user: user,
             token: token
         }, function(resp) {
             if (resp.success) {
                 $result.text(resp.data.message).addClass('success');
-                // Show plans
                 var $plans = $('#sm-test-plans');
                 $plans.empty();
                 if (resp.data.plans && Object.keys(resp.data.plans).length > 0) {
@@ -146,7 +198,7 @@ jQuery(document).ready(function($) {
         }).fail(function() {
             $result.text('Request failed.').addClass('error');
         }).always(function() {
-            $btn.prop('disabled', false);
+            $btn.prop('disabled', false).text('Test & Sync');
             $('#sm-loader').removeClass('is-active');
         });
     });
@@ -160,9 +212,6 @@ jQuery(document).ready(function($) {
         var $btn = $(this);
         var $card = $(this).closest('.skyhshoso-sm-server-card');
 
-        // Fetch server data via POST with the save endpoint but with existing ID
-        // Actually, we just trigger a re-sync by saving the same server
-        // Find in our data
         var server = null;
         $.each(data.servers, function(i, s) {
             if (String(s.id) === String(id)) { server = s; return false; }
@@ -177,15 +226,16 @@ jQuery(document).ready(function($) {
             nonce: data.nonce_save,
             server_id: id,
             name: server.name,
+            server_type: server.type, 
             host: server.host,
+            port: server.port || '', // FIXED: Added fallback for legacy data
             user: server.user,
-            token: 'EXISTING_TOKEN_PLACEHOLDER', // token exists in meta
+            token: 'EXISTING_TOKEN_PLACEHOLDER', 
             server_ip: server.server_ip || '',
             nameservers: server.nameservers || []
         }, function(resp) {
             if (resp.success) {
                 showNotice('success', resp.data.message);
-                // Reload after short delay
                 setTimeout(function() { location.reload(); }, 1500);
             } else {
                 showNotice('error', resp.data.message);
@@ -246,7 +296,7 @@ jQuery(document).ready(function($) {
                 $card.fadeOut(300, function() { $(this).remove(); });
                 showNotice('success', resp.data.message);
                 if ($('.skyhshoso-sm-server-card').length === 0) {
-                    location.reload(); // reload to show empty state
+                    location.reload(); 
                 }
             } else {
                 showNotice('error', resp.data.message);
@@ -261,23 +311,27 @@ jQuery(document).ready(function($) {
     // -------------------------------------------------------------------------
     // Save server form
     // -------------------------------------------------------------------------
-
-    $('#skyhshoso-sm-form').on('submit', function(e) {
+    
+    // FIXED: Changed from #cielo-submit-btn to #sm-submit
+    $('#sm-submit').on('click', function(e) {
         e.preventDefault();
 
         var name = $('#sm_name').val().trim();
+        var type = $('#sm_type').val(); 
         var host = $('#sm_host').val().trim();
+        var port = $('#sm_port').val().trim(); // GRAB PORT
         var user = $('#sm_user').val().trim();
         var token = $('#sm_token').val().trim();
         var serverIp = $('#sm_server_ip').val().trim();
         var nameservers = [];
         $('.sm-ns-input').each(function() {
-            nameservers.push($(this).val().trim());
+            if ($(this).val().trim() !== '') {
+                nameservers.push($(this).val().trim());
+            }
         });
         var serverId = $('#sm_server_id').val();
 
-        // In edit mode, token is optional (keep existing)
-        var isEdit = $(this).data('edit-mode') === '1';
+        var isEdit = $('#skyhshoso-sm-form').data('edit-mode') === '1';
 
         if (!name || !host || !user) {
             showNotice('error', data.strings.fill_fields);
@@ -289,14 +343,13 @@ jQuery(document).ready(function($) {
             return;
         }
 
-        // In edit mode, send placeholder so PHP keeps the existing token
         if (isEdit && !token) {
             token = 'EXISTING_TOKEN_PLACEHOLDER';
         }
 
-        var $btn = $('#sm-submit');
-        var $loader = $('#sm-loader');
-        $btn.prop('disabled', true);
+        var $btn = $(this);
+        var $loader = $('#sm-loader'); // Reverted to sm-loader
+        $btn.prop('disabled', true).text('Saving...');
         $loader.addClass('is-active');
         showNotice('info', data.strings.saving);
 
@@ -305,7 +358,9 @@ jQuery(document).ready(function($) {
             nonce: data.nonce_save,
             server_id: serverId,
             name: name,
+            server_type: type, 
             host: host,
+            port: port, // SEND PORT
             user: user,
             token: token,
             server_ip: serverIp,
@@ -320,7 +375,7 @@ jQuery(document).ready(function($) {
         }).fail(function() {
             showNotice('error', data.strings.error);
         }).always(function() {
-            $btn.prop('disabled', false);
+            $btn.prop('disabled', false).text('Save Server');
             $loader.removeClass('is-active');
         });
     });

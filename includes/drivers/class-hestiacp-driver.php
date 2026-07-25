@@ -8,18 +8,22 @@ class SkyHSHOSO_HestiaCP_Driver implements SkyHSHOSO_Hosting_Driver_Interface {
     private $host;
     private $user; // Hestia Access Key ID or Admin Username
     private $token; // Hestia Secret Key or Admin Password
+    private $port; // Ensure the port property is declared
     private $api_url;
 
-    public function __construct($host, $user, $token) {
+    // FIX 1: Added $port = 8083 to the constructor signature
+    public function __construct($host, $user, $token, $port = 8083) {
         $this->host = $host;
         $this->user = $user;
         $this->token = $token;
+        $this->port = $port; // Save the port!
         
-        // HestiaCP API runs on port 8083 by default
+        // FIX 2: Dynamically construct the API URL using $this->port
         $clean_host = preg_replace('/:\d+$/', '', parse_url($host, PHP_URL_HOST) ?: $host);
-        $this->api_url = "https://{$clean_host}:8083/api/";
+        $this->api_url = "https://{$clean_host}:{$this->port}/api/";
     }
-
+    
+    // FIX 3: Cleaned up the overlapping function declarations
     /**
      * Core Private Method for HestiaCP API calls
      * Added $return_raw to handle string returns (like SSO URLs)
@@ -42,6 +46,10 @@ class SkyHSHOSO_HestiaCP_Driver implements SkyHSHOSO_Hosting_Driver_Interface {
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($post_data));
+        
+        // NEW: Force the connection to fail gracefully if the port is blocked!
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15); 
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 15);
 
         $response = trim(curl_exec($ch));
         curl_close($ch);
@@ -64,7 +72,7 @@ class SkyHSHOSO_HestiaCP_Driver implements SkyHSHOSO_Hosting_Driver_Interface {
     public function test_connection() {
         $res = $this->hestia_api_request('v-list-sys-info');
         if ($res['success']) { return true; }
-        return new WP_Error('hestia_connection_failed', 'Could not connect to HestiaCP. Check your Access Keys and ensure port 8083 is open.');
+        return new WP_Error('hestia_connection_failed', 'Could not connect to HestiaCP. Check your Access Keys and ensure port ' . $this->port . ' is open.');
     }
 
     // --- 2. LIFECYCLE MANAGEMENT ---
@@ -134,12 +142,12 @@ class SkyHSHOSO_HestiaCP_Driver implements SkyHSHOSO_Hosting_Driver_Interface {
                 'diskusage' => [
                     'value'   => $data['U_DISK'] . ' MB',
                     'max'     => ($data['DISK_QUOTA'] === 'unlimited') ? 'unlimited' : $data['DISK_QUOTA'] . ' MB',
-                    'percent' => ($data['DISK_QUOTA'] > 0) ? round(($data['U_DISK'] / $data['DISK_QUOTA']) * 100, 2) : 0
+                    'percent' => ($data['DISK_QUOTA'] > 0 && $data['DISK_QUOTA'] !== 'unlimited') ? round(($data['U_DISK'] / $data['DISK_QUOTA']) * 100, 2) : 0
                 ],
                 'bandwidth' => [
                     'value'   => $data['U_BANDWIDTH'] . ' MB',
                     'max'     => ($data['BANDWIDTH'] === 'unlimited') ? 'unlimited' : $data['BANDWIDTH'] . ' MB',
-                    'percent' => ($data['BANDWIDTH'] > 0) ? round(($data['U_BANDWIDTH'] / $data['BANDWIDTH']) * 100, 2) : 0
+                    'percent' => ($data['BANDWIDTH'] > 0 && $data['BANDWIDTH'] !== 'unlimited') ? round(($data['U_BANDWIDTH'] / $data['BANDWIDTH']) * 100, 2) : 0
                 ],
                 'mysqldbs' => [
                     'value'   => $data['U_DATABASES'],
@@ -165,11 +173,11 @@ class SkyHSHOSO_HestiaCP_Driver implements SkyHSHOSO_Hosting_Driver_Interface {
         return new WP_Error('hestia_error', 'Failed to generate SSO session link.');
     }
 
-    public function scan_for_wordpress($username, $domain_doc_roots) { 
-        // We will build the CLI/bash scanner for this next when we abstract the WP Toolkit logic!
-        return []; 
+    public function scan_for_wordpress($username = 'root', $domain_doc_roots = array()) {
+        return array(); // Hestia logic coming later
     }
-	// --- 6. PACKAGES (NEW) ---
+
+    // --- 6. PACKAGES (NEW) ---
     public function get_packages() {
         // HestiaCP returns a JSON object where the keys are the package names
         $res = $this->hestia_api_request('v-list-user-packages', ['json'], true);
