@@ -1,24 +1,19 @@
 <?php
 /**
- * Plugin Name: SkyHS - Sell Domain, Cpanel Hosting and Subscription using WooCommerce
- * Description: A hosting solution plugin that requires WooCommerce. Includes a built-in subscription system.
- * Version: 1.0.6
- * Author: Siteskyline
- * Author URI: http://siteskyline.com
- * Text Domain: skyhs-hosting-solution
- * Requires at least: 6.9
- * Requires PHP: 7.2
+ * Plugin Name: Cielo Hosting Solution
+ * Plugin URI: https://github.com/qrussell/cielo-hosting-solution
+ * Description: Automated cPanel and WP Toolkit provisioning via WooCommerce. (Forked from Sky Hosting Solution).
+ * Version: 1.0.0
+ * Author: cielocloud plugins
  * License: GPLv2 or later
- * License URI: https://www.gnu.org/licenses/gpl-2.0.html
- * WC requires at least: 3.0
- * WC tested up to: 5.0
- * Requires Plugins: woocommerce
- * WooCommerce: true
- *
- * @package Hosting_Solution
+ * Text Domain: cielo-hosting-solution
+ * Update URI: false
  */
 
-defined( 'ABSPATH' ) || exit;
+// Exit if accessed directly
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
 
 // Define plugin constants
 define( 'SKYHSHOSO_VERSION', '1.0.6' );
@@ -231,7 +226,24 @@ final class SkyHSHOSO {
         require_once SKYHSHOSO_PLUGIN_DIR . 'includes/early-renewal/skyhshoso-early-renewal-functions.php';
         require_once SKYHSHOSO_PLUGIN_DIR . 'includes/early-renewal/class-skyhshoso-early-renewal-manager.php';
         require_once SKYHSHOSO_PLUGIN_DIR . 'includes/early-renewal/class-skyhshoso-cart-early-renewal.php';
+		// 1. Require the Plugin Update Checker library
+		require_once plugin_dir_path( __FILE__ ) . 'includes/plugin-update-checker/plugin-update-checker.php';
 
+		// 2. Initialize the updater
+		use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
+
+		$cielo_update_checker = PucFactory::buildUpdateChecker(
+			'https://github.com/YOUR_GITHUB_USERNAME/cielo-hosting-solution/', // Your GitHub repo URL
+			__FILE__, // The main plugin file
+			'cielo-hosting-solution' // The plugin slug
+		);
+
+		// Optional: Set the branch that contains the stable release.
+		$cielo_update_checker->setBranch('main'); 
+
+		// OPTIONAL: If your GitHub repository is PRIVATE, you must provide a Personal Access Token (PAT)
+		// You can generate a PAT in GitHub under Settings -> Developer Settings -> Personal access tokens
+		// $cielo_update_checker->setAuthentication('your_github_personal_access_token_here');
         // Initialize early renewal.
         SkyHSHOSO_Early_Renewal_Manager::init();
         new SkyHSHOSO_Cart_Early_Renewal();
