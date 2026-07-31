@@ -6,7 +6,7 @@
  * Version: 1.0.0
  * Author: cielocloud plugins
  * License: GPLv2 or later
- * Text Domain: cielo-hosting-solution
+ * Text Domain: skyhs-hosting-solution
  * Update URI: false
  */
 
@@ -78,7 +78,7 @@ final class SkyHSHOSO {
     }
 
     public function register_nav_menus() {
-        register_nav_menu( 'skyhshoso_dashboard_header', __( 'SkyHS Dashboard Header Menu', 'skyhs-hosting-solution' ) );
+        register_nav_menu( 'skyhshoso_dashboard_header', __( 'CieloHS Dashboard Header Menu', 'skyhs-hosting-solution' ) );
     }
 
     private function includes() {
@@ -309,7 +309,7 @@ final class SkyHSHOSO {
     
     public function dependency_notice() {
         if ( ! $this->is_woocommerce_active() ) {
-            $message = __( 'SkyHS Hosting Solution requires WooCommerce to be installed and activated.', 'skyhs-hosting-solution' );
+            $message = __( 'Cielo Hosting Solution requires WooCommerce to be installed and activated.', 'skyhs-hosting-solution' );
             echo '<div class="error"><p>' . esc_html( $message ) . '</p></div>';
         }
     }
@@ -527,7 +527,7 @@ function cielo_register_hosting_product_type( $types ) {
 function skyhshoso_hosting_solution_activate() {
     if ( ! SkyHSHOSO()->is_woocommerce_active() ) {
         deactivate_plugins( plugin_basename( __FILE__ ) );
-        wp_die( esc_html__( 'SkyHS Hosting Solution requires WooCommerce to be installed and activated.', 'skyhs-hosting-solution' ) );
+        wp_die( esc_html__( 'Cielo Hosting Solution requires WooCommerce to be installed and activated.', 'skyhs-hosting-solution' ) );
     }
 
     if ( ! class_exists( 'SkyHSHOSO_Subscription_DB' ) ) {
