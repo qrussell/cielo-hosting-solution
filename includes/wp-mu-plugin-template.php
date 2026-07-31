@@ -1,8 +1,8 @@
 <?php
 /**
- * Plugin Name: SkyHS Hardened Security
+ * Plugin Name: CieloHS Hardened Security
  * Description: Upload security, PHP injection protection (MU Plugin)
- * Author: SkyHS
+ * Author: CieloHS
  */
 
 defined('ABSPATH') || exit;
@@ -193,7 +193,7 @@ add_action('admin_notices', function () {
     $color      = $pct >= 90 ? '#dc3232' : ($pct >= 70 ? '#ffb900' : '#46b450');
     printf(
         '<div class="notice notice-info"><p>
-            <strong>SkyHS Storage:</strong> %.1f MB / %d MB used (%.0f%%)
+            <strong>CieloHS Storage:</strong> %.1f MB / %d MB used (%.0f%%)
             <span style="display:inline-block;margin-left:10px;width:150px;height:10px;
                 background:#ddd;border-radius:5px;vertical-align:middle;">
                 <span style="display:block;width:%s%%;height:100%%;background:%s;

@@ -204,7 +204,7 @@ class SkyHSHOSO_Settings {
      * Render general section
      */
     public function render_general_section() {
-        echo '<p>' . esc_html__( 'Configure general settings for Hosting Solution plugin.', 'skyhs-hosting-solution' ) . '</p>';
+        echo '<p>' . esc_html__( 'Configure general settings for Cielo Hosting Solution plugin.', 'skyhs-hosting-solution' ) . '</p>';
     }
 
     // -------------------------------------------------------------------------
@@ -523,7 +523,7 @@ class SkyHSHOSO_Settings {
             'selected'          => absint( $dashboard_page ),
         ) );
         
-		echo '<p class="description">' . esc_html__( 'Select the page where your SkyHS Dashboard shortcode [skyhshoso_dashboard] is displayed. Users will be redirected to this page when visiting hosting product pages.', 'skyhs-hosting-solution' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'Select the page where your CieloHS Dashboard shortcode [skyhshoso_dashboard] is displayed. Users will be redirected to this page when visiting hosting product pages.', 'skyhs-hosting-solution' ) . '</p>';
 	}
 
 	/**
@@ -827,7 +827,7 @@ class SkyHSHOSO_Settings {
 
         if ( ! empty( $notices ) ) {
             echo '<div class="notice notice-warning is-dismissible">';
-            echo '<p><strong>' . esc_html__( 'Hosting Solution: Test Mode is enabled', 'skyhs-hosting-solution' ) . '</strong></p>';
+            echo '<p><strong>' . esc_html__( 'Cielo Hosting Solution: Test Mode is enabled', 'skyhs-hosting-solution' ) . '</strong></p>';
             echo '<p>' . esc_html( implode( ' ', $notices ) ) . ' ';
             echo '<a href="' . esc_url( $settings_url ) . '">' . esc_html__( 'Go to settings', 'skyhs-hosting-solution' ) . '</a></p>';
             echo '</div>';

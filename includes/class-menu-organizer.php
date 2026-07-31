@@ -47,8 +47,8 @@ class SkyHSHOSO_Menu_Organizer {
 
         // Add main parent menu "SKYHS"
         add_menu_page(
-            __( 'SKYHS', 'skyhs-hosting-solution' ),
-            __( 'SKYHS', 'skyhs-hosting-solution' ),
+            __( 'CieloHS', 'skyhs-hosting-solution' ),
+            __( 'CieloHS', 'skyhs-hosting-solution' ),
             'skyhshoso_view_dashboard',
             'skyhshoso-dashboard',
             array( $this, 'render_dashboard' ),
@@ -226,8 +226,8 @@ class SkyHSHOSO_Menu_Organizer {
         
         ?>
         <div class="wrap skyhshoso-admin-dashboard">
-            <h1><?php echo esc_html__('SKYHS Dashboard', 'skyhs-hosting-solution'); ?></h1>
-            <p><?php echo esc_html__('Welcome to the SKYHS Hosting Solution dashboard. Here is a quick overview of your hosting environment.', 'skyhs-hosting-solution'); ?></p>
+            <h1><?php echo esc_html__('CieloHS Dashboard', 'skyhs-hosting-solution'); ?></h1>
+            <p><?php echo esc_html__('Welcome to the Cielo Hosting Solution dashboard. Here is a quick overview of your hosting environment.', 'skyhs-hosting-solution'); ?></p>
             
             <div class="skyhshoso-dashboard-widgets" style="display: flex; gap: 20px; margin-top: 30px; flex-wrap: wrap;">
                 
@@ -288,7 +288,7 @@ class SkyHSHOSO_Menu_Organizer {
         ?>
         <div class="skyhshoso-wizard-wrap">
             <div class="skyhshoso-wizard-header">
-                <h1><?php echo esc_html__('Skyhs Settings', 'skyhs-hosting-solution'); ?></h1>
+                <h1><?php echo esc_html__('CieloHS Settings', 'skyhs-hosting-solution'); ?></h1>
                 <p><?php esc_html_e( 'Configure general plugin settings like test mode and dashboard page.', 'skyhs-hosting-solution' ); ?></p>
             </div>
 
@@ -339,7 +339,7 @@ class SkyHSHOSO_Menu_Organizer {
                                 'selected'          => ! empty( $options['dashboard_page'] ) ? absint( $options['dashboard_page'] ) : 0,
                             ) );
                             ?>
-                            <p style="font-size:12px;color:#646970;margin:8px 0 0 0;"><?php esc_html_e( 'Select the page where your SkyHS Dashboard shortcode [skyhshoso_dashboard] is displayed.', 'skyhs-hosting-solution' ); ?></p>
+                            <p style="font-size:12px;color:#646970;margin:8px 0 0 0;"><?php esc_html_e( 'Select the page where your CieloHS Dashboard shortcode [skyhshoso_dashboard] is displayed.', 'skyhs-hosting-solution' ); ?></p>
                         </div>
 
                         <div class="skyhshoso-wizard-form-group">

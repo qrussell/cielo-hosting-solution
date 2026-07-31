@@ -30,7 +30,7 @@ class SkyHSHOSO_Menu_Endpoints {
     public function register_menu_metabox() {
         add_meta_box(
             'skyhshoso-custom-menu-endpoints',
-            __( 'SkyHS Endpoints', 'skyhs-hosting-solution' ),
+            __( 'CieloHS Endpoints', 'skyhs-hosting-solution' ),
             array( $this, 'render_menu_metabox' ),
             'nav-menus',
             'side',
@@ -143,7 +143,7 @@ class SkyHSHOSO_Menu_Endpoints {
             // For custom items, ensure type is 'custom' and type_label is set correctly.
             // WordPress will handle the URL, title etc. as they are passed via the form.
             $menu_item->type       = 'custom';
-            $menu_item->type_label = __( 'SkyHS Endpoint', 'skyhs-hosting-solution' );
+            $menu_item->type_label = __( 'CieloHS Endpoint', 'skyhs-hosting-solution' );
         }
         return $menu_item;
     }

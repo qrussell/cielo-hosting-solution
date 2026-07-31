@@ -38,7 +38,7 @@ class SkyHSHOSO_Onboarding_Wizard {
     public function add_wizard_page() {
         add_submenu_page(
             null, // Hide from menu
-            __( 'SkyHS Setup Wizard', 'skyhs-hosting-solution' ),
+            __( 'CieloHS Setup Wizard', 'skyhs-hosting-solution' ),
             __( 'Setup Wizard', 'skyhs-hosting-solution' ),
             'manage_options',
             'skyhshoso-setup',
@@ -66,7 +66,7 @@ class SkyHSHOSO_Onboarding_Wizard {
         $setup_url = admin_url( 'admin.php?page=skyhshoso-setup' );
         ?>
         <div class="notice notice-info is-dismissible">
-            <p><strong><?php esc_html_e( 'Welcome to SkyHS Hosting Solution!', 'skyhs-hosting-solution' ); ?></strong></p>
+            <p><strong><?php esc_html_e( 'Welcome to Cielo Hosting Solution!', 'skyhs-hosting-solution' ); ?></strong></p>
             <p><?php esc_html_e( 'Please run the setup wizard to configure your first server, connect your Enom account, and set up your dashboard.', 'skyhs-hosting-solution' ); ?></p>
             <p><a href="<?php echo esc_url( $setup_url ); ?>" class="button button-primary"><?php esc_html_e( 'Run Setup Wizard', 'skyhs-hosting-solution' ); ?></a></p>
         </div>
@@ -109,7 +109,7 @@ class SkyHSHOSO_Onboarding_Wizard {
                     'ajax_error'      => __( 'A communication error occurred. Please try again.', 'skyhs-hosting-solution' ),
                     'packages_found'  => __( 'Packages found with default feature list:', 'skyhs-hosting-solution' ),
                     'setup_complete'  => __( 'Setup Complete!', 'skyhs-hosting-solution' ),
-                    'go_to_dashboard' => __( 'Go to SkyHS Dashboard', 'skyhs-hosting-solution' ),
+                    'go_to_dashboard' => __( 'Go to CieloHS Dashboard', 'skyhs-hosting-solution' ),
                 )
             )
         );
@@ -122,7 +122,7 @@ class SkyHSHOSO_Onboarding_Wizard {
         ?>
         <div class="skyhshoso-wizard-wrap">
             <div class="skyhshoso-wizard-header">
-                <h1><?php esc_html_e( 'SkyHS Setup Wizard', 'skyhs-hosting-solution' ); ?></h1>
+                <h1><?php esc_html_e( 'CieloHS Setup Wizard', 'skyhs-hosting-solution' ); ?></h1>
                 <p><?php esc_html_e( 'Let\'s get your hosting solution up and running in a few quick steps.', 'skyhs-hosting-solution' ); ?></p>
             </div>
 
