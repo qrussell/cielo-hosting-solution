@@ -175,11 +175,11 @@ class SkyHSHOSO_Menu_Organizer {
             array( SkyHSHOSO_Customize::instance(), 'render_page' )
         );
 
-        // Add SKYHS Settings submenu
+        // Add CieloHS Settings submenu
         add_submenu_page(
             'skyhshoso-dashboard',
-            __( 'Skyhs Settings', 'skyhs-hosting-solution' ),
-            __( 'Skyhs Settings', 'skyhs-hosting-solution' ),
+            __( 'CieloHS Settings', 'skyhs-hosting-solution' ),
+            __( 'CieloHS Settings', 'skyhs-hosting-solution' ),
             'skyhshoso_manage_settings',
             'skyhshoso-settings',
             array( $this, 'render_skyhshoso_settings' )
